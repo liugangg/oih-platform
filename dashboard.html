@@ -1,0 +1,2043 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OIH — Open Intelligence Hub</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+<script src="https://unpkg.com/@rdkit/rdkit@2024.3.3/dist/RDKit_minimal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{
+  colors:{
+    deep:'#0f1117',surface:'rgba(22,27,39,0.7)',card:'rgba(22,27,39,0.65)',
+    border:'rgba(255,255,255,0.08)',cyan:'#00d4ff',purple:'#7b61ff',
+    ok:'#22c55e',warn:'#f59e0b',bad:'#ef4444',
+  },
+  fontFamily:{title:['Space Grotesk','system-ui'],mono:['IBM Plex Mono','monospace']},
+}}}
+</script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0f1117;color:#e2e8f0;font-family:'IBM Plex Mono',monospace;overflow:hidden}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.15);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,212,255,0.3)}
+
+/* glass */
+.glass{background:rgba(22,27,39,0.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.08)}
+.glass-strong{background:rgba(22,27,39,0.75);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.10)}
+
+/* animations */
+@keyframes glow-cyan{0%,100%{box-shadow:0 0 6px #00d4ff33}50%{box-shadow:0 0 18px #00d4ff66}}
+@keyframes pulse-ring{0%{transform:scale(0.8);opacity:1}100%{transform:scale(2.2);opacity:0}}
+@keyframes float-in{from{transform:translateY(6px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes typing{0%,80%{opacity:0.3}40%{opacity:1}}
+
+.glow-cyan{animation:glow-cyan 2.5s ease-in-out infinite}
+.float-in{animation:float-in 0.25s ease-out}
+.typing-dot{animation:typing 1.2s ease-in-out infinite}
+
+/* tab border pulse for running tasks */
+@keyframes tab-pulse{0%,100%{border-color:rgba(0,212,255,0.3)}50%{border-color:rgba(0,212,255,0.7)}}
+.tab-running{animation:tab-pulse 1.5s ease-in-out infinite}
+.tab-done{border-color:rgba(34,197,94,0.4);transition:border-color 0.3s}
+
+/* pipeline preview flow */
+.pp-flow{display:flex;align-items:center;gap:4px;overflow-x:auto;padding:4px 0}
+.pp-step{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:8px;background:rgba(22,27,39,0.6);border:1px solid rgba(255,255,255,0.06);font-size:10px;min-width:80px}
+.pp-step.active{border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.06)}
+.pp-step.done{border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.06)}
+.pp-arrow{flex-shrink:0;color:#a0aec0;font-size:12px}
+
+/* timeline connector */
+.tl-line{position:absolute;left:15px;top:32px;bottom:-8px;width:1px;background:linear-gradient(to bottom,rgba(0,212,255,0.2),transparent)}
+
+/* 3dmol container */
+.mol3d{width:100%;height:400px;max-height:400px;border-radius:8px;overflow:hidden;position:relative}
+
+/* progress bar inner glow */
+.bar-glow{box-shadow:0 0 8px currentColor}
+
+/* attachment menu */
+.attach-menu{position:absolute;bottom:calc(100% + 8px);left:0;z-index:50;min-width:220px}
+.attach-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 14px;font-size:12px;color:#e2e8f0;text-align:left;border:none;background:none;cursor:pointer;transition:background 0.15s}
+.attach-menu button:hover{background:rgba(0,212,255,0.08)}
+
+/* attachment tags */
+.attach-tag{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;font-size:11px;font-family:'IBM Plex Mono',monospace;border-radius:6px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);color:#a0aec0}
+.attach-tag .tag-close{cursor:pointer;opacity:0.5;transition:opacity 0.15s;font-size:13px}
+.attach-tag .tag-close:hover{opacity:1;color:#ef4444}
+
+/* PTM card */
+.ptm-card{margin-top:6px;padding:10px 14px;border-radius:10px;background:rgba(22,27,39,0.8);border:1px solid rgba(255,255,255,0.08);font-size:11px;line-height:1.7}
+.ptm-card .ptm-title{font-size:12px;font-weight:600;color:#e2e8f0;margin-bottom:4px}
+.ptm-card .ptm-ok{color:#22c55e}
+.ptm-card .ptm-warn{color:#f59e0b}
+.ptm-card .ptm-file{color:#7b61ff}
+
+/* FASTA/SMILES modal */
+.paste-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px)}
+.paste-modal-inner{width:420px;max-width:90vw;padding:20px;border-radius:12px;background:rgba(22,27,39,0.95);border:1px solid rgba(255,255,255,0.12)}
+</style>
+</head>
+<body>
+<!-- particle canvas inserted by JS -->
+<canvas id="particles" style="position:fixed;inset:0;z-index:0;pointer-events:none"></canvas>
+<div id="root" style="position:relative;z-index:1"></div>
+
+<!-- ─── Particle background ─────────────────────────────────────────────── -->
+<script>
+(function(){
+  const c=document.getElementById('particles'),ctx=c.getContext('2d');
+  let W,H,pts=[];
+  function resize(){W=c.width=innerWidth;H=c.height=innerHeight;pts=[];
+    for(let i=0;i<60;i++) pts.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.2+0.3,
+      vx:(Math.random()-0.5)*0.15,vy:(Math.random()-0.5)*0.15,a:Math.random()*0.12+0.03});}
+  resize();addEventListener('resize',resize);
+  function draw(){ctx.clearRect(0,0,W,H);
+    for(const p of pts){p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,212,255,${p.a})`;ctx.fill();}
+    // faint connections
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=dx*dx+dy*dy;
+      if(d<18000){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);
+        ctx.strokeStyle=`rgba(0,212,255,${0.03*(1-d/18000)})`;ctx.stroke();}}
+    requestAnimationFrame(draw);}
+  draw();
+})();
+</script>
+
+<!-- ─── React App ───────────────────────────────────────────────────────── -->
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo}=React;
+const API="http://192.168.31.23:8080";
+
+/* ── constants ────────────────────────────────────────────────────────────── */
+const EXAMPLES=[
+  {icon:"🧬",text:"设计靶向HER2的ADC，payload用MMAE"},
+  {icon:"🔬",text:"设计能结合CD36的纳米抗体"},
+  {icon:"💊",text:"找PD-L1小分子抑制剂并评估ADMET"},
+  {icon:"🎯",text:"预测EGFR突变体与osimertinib的结合"},
+];
+
+const ST={
+  pending:  {c:'#6b7280',ring:'border-gray-600',label:'PENDING'},
+  running:  {c:'#00d4ff',ring:'border-cyan',label:'RUNNING'},
+  completed:{c:'#22c55e',ring:'border-ok',label:'DONE'},
+  failed:   {c:'#ef4444',ring:'border-bad',label:'FAILED'},
+};
+
+/* ── Pipeline Preview configs ─────────────────────────────────────────────── */
+const PIPELINE_PATTERNS=[
+  {re:/pocket.guided|自动.*口袋.*binder|find.*pocket.*design/i,name:'Pocket-Guided Binder + ADC (16-step, 6D scoring)',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'📚',name:'RAG Literature',time:'~5s'},
+    {icon:'🕳️',name:'Fpocket+P2Rank',time:'~1min'},{icon:'🎯',name:'DiscoTope3',time:'~2min'},
+    {icon:'📍',name:'FreeSASA',time:'~1min'},{icon:'🧮',name:'6D Scoring',time:'~5s'},
+    {icon:'🤖',name:'Qwen Select',time:'~10s'},{icon:'🎲',name:'DiffDock',time:'~10min'},
+    {icon:'🧬',name:'RFdiffusion',time:'~20min'},{icon:'🧩',name:'BindCraft',time:'~30min'},
+    {icon:'🔤',name:'ProteinMPNN',time:'~5min'},{icon:'🔬',name:'AlphaFold3',time:'~15min'},
+    {icon:'📍',name:'FreeSASA ADC',time:'~1min'},{icon:'🔗',name:'Linker',time:'~1min'},
+    {icon:'💊',name:'MMAE',time:'~1min'},{icon:'⚗️',name:'ADC DAR=4',time:'~2min'},
+  ]},
+  {re:/ADC|抗体|nanobody|binder/i,name:'Binder Design + ADC Pipeline',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🧬',name:'RFdiffusion',time:'~20min'},
+    {icon:'🔤',name:'ProteinMPNN',time:'~5min'},{icon:'🔬',name:'AlphaFold3',time:'~15min'},
+    {icon:'📍',name:'FreeSASA',time:'~1min'},{icon:'🔗',name:'Linker Select',time:'~1min'},
+    {icon:'💊',name:'Fetch Payload',time:'~1min'},{icon:'⚗️',name:'ADC Conjugate',time:'~2min'},
+  ]},
+  {re:/drug discovery|药物发现/i,name:'Drug Discovery Pipeline',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🕳️',name:'fpocket',time:'~2min'},
+    {icon:'💊',name:'Fetch Molecule',time:'~1min'},{icon:'🎯',name:'GNINA Docking',time:'~10min'},
+    {icon:'🔬',name:'AlphaFold3',time:'~15min'},{icon:'🌊',name:'GROMACS MD',time:'~30min'},
+  ]},
+  {re:/对接|docking|GNINA|AutoDock/i,name:'Molecular Docking',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🕳️',name:'fpocket',time:'~2min'},
+    {icon:'💊',name:'Fetch Molecule',time:'~1min'},{icon:'🎯',name:'Docking',time:'~10min'},
+  ]},
+  {re:/筛选|virtual screening|ZINC/i,name:'Virtual Screening',steps:[
+    {icon:'🕳️',name:'fpocket',time:'~2min'},{icon:'🧪',name:'Chemprop ADMET',time:'~10min'},
+    {icon:'🎯',name:'AutoDock-GPU',time:'~60min'},{icon:'📊',name:'Result Ranking',time:'~1min'},
+  ]},
+  {re:/MD|分子动力学|GROMACS/i,name:'MD Simulation',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'💊',name:'Fetch Molecule',time:'~1min'},
+    {icon:'🎯',name:'Docking',time:'~10min'},{icon:'🌊',name:'GROMACS MD',time:'~30min'},
+  ]},
+  {re:/ADMET|毒性|chemprop/i,name:'ADMET Prediction',steps:[
+    {icon:'💊',name:'Fetch Molecule',time:'~1min'},{icon:'🧪',name:'Chemprop',time:'~5min'},
+  ]},
+  {re:/fpocket|口袋检测|pocket detect/i,name:'Pocket Detection (Fpocket)',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🕳️',name:'Fpocket',time:'~1min'},
+  ]},
+  {re:/p2rank|ML.*pocket|pocket.*predict/i,name:'Pocket Prediction (P2Rank)',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🧠',name:'P2Rank',time:'~1min'},
+  ]},
+  {re:/diffdock|盲对接|blind dock/i,name:'Blind Docking (DiffDock)',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'💊',name:'Fetch Molecule',time:'~1min'},
+    {icon:'🎲',name:'DiffDock',time:'~10min'},
+  ]},
+];
+function detectPipeline(text){
+  if(!text||text.length<3)return null;
+  for(const p of PIPELINE_PATTERNS) if(p.re.test(text)) return p;
+  return null;
+}
+
+const TOOL_LABEL={
+  fetch_pdb:'Fetch PDB',alphafold3:'AlphaFold 3',rfdiffusion:'RFdiffusion',
+  proteinmpnn:'ProteinMPNN',bindcraft:'BindCraft',fpocket:'Fpocket',p2rank:'P2Rank',
+  gnina:'GNINA',autodock_gpu:'AutoDock-GPU',diffdock:'DiffDock',gromacs:'GROMACS MD',
+  chemprop:'Chemprop',chemprop_predict:'Chemprop',freesasa:'FreeSASA',
+  linker_select:'Linker Select',rdkit_conjugate:'RDKit Conjugate',
+  drug_discovery_pipeline:'Drug Pipeline',binder_design_pipeline:'Binder Pipeline',
+  esm2:'ESM-2',fetch_molecule:'Fetch Molecule',rag_search:'Literature',
+};
+
+/* ── 3Dmol Viewer (persistent — never unmounts) ──────────────────────────── */
+const VIEW_STYLES=['rainbow','bychain','surface','contact','stickCartoon'];
+const VIEW_STYLE_LABEL={rainbow:'Rainbow',bychain:'By Chain',surface:'Surface',contact:'Contact',stickCartoon:'Stick+Cartoon'};
+const VIEW_STYLE_ICON={rainbow:'🌈',bychain:'🔗',surface:'🫧',contact:'🎯',stickCartoon:'🪄'};
+
+/* Residue classification for binding mode analysis */
+const HBOND_DONORS=new Set(['SER','THR','ASN','GLN','TYR','TRP','HIS','ARG','LYS']);
+const HYDROPHOBIC=new Set(['ALA','VAL','ILE','LEU','MET','PHE','PRO','TRP']);
+const POS_CHARGED=new Set(['ARG','LYS']);
+const NEG_CHARGED=new Set(['ASP','GLU']);
+const PI_AROMATIC=new Set(['PHE','TYR','TRP','HIS']);
+
+/* Compute chain-chain contacts (<cutoff Angstrom) */
+function computeContacts(viewer,cutoff){
+  cutoff=cutoff||4.0;
+  const model=viewer.getModel(0);
+  if(!model)return{contactsA:[],contactsB:[],pairs:[]};
+  const atomsA=model.selectedAtoms({chain:'A'});
+  const atomsB=model.selectedAtoms({chain:'B'});
+  if(!atomsA.length||!atomsB.length)return{contactsA:[],contactsB:[],pairs:[]};
+  const setA=new Set(),setB=new Set();
+  const resMapA={},resMapB={};
+  const pairs=[];
+  const grid={};
+  const gsize=cutoff;
+  atomsB.forEach(function(b){
+    const gx=Math.floor(b.x/gsize),gy=Math.floor(b.y/gsize),gz=Math.floor(b.z/gsize);
+    const key=gx+','+gy+','+gz;
+    (grid[key]=grid[key]||[]).push(b);
+  });
+  atomsA.forEach(function(a){
+    const gx=Math.floor(a.x/gsize),gy=Math.floor(a.y/gsize),gz=Math.floor(a.z/gsize);
+    for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++)for(var dz=-1;dz<=1;dz++){
+      var nbrs=grid[(gx+dx)+','+(gy+dy)+','+(gz+dz)];
+      if(!nbrs)continue;
+      nbrs.forEach(function(b){
+        var d=Math.sqrt(Math.pow(a.x-b.x,2)+Math.pow(a.y-b.y,2)+Math.pow(a.z-b.z,2));
+        if(d<cutoff){
+          setA.add(a.resi);setB.add(b.resi);
+          resMapA[a.resi]=a.resn;resMapB[b.resi]=b.resn;
+          pairs.push({a:a,b:b,dist:d,resiA:a.resi,resiB:b.resi,resnA:a.resn,resnB:b.resn});
+        }
+      });
+    }
+  });
+  var bestPairs={};
+  pairs.forEach(function(p){
+    var key=p.resiA+'-'+p.resiB;
+    if(!bestPairs[key]||p.dist<bestPairs[key].dist)bestPairs[key]=p;
+  });
+  var uniquePairs=Object.values(bestPairs).sort(function(a,b){return a.dist-b.dist});
+  return{
+    contactsA:Array.from(setA).sort(function(a,b){return a-b}).map(function(r){return{resi:r,resn:resMapA[r]}}),
+    contactsB:Array.from(setB).sort(function(a,b){return a-b}).map(function(r){return{resi:r,resn:resMapB[r]}}),
+    pairs:uniquePairs,
+  };
+}
+
+function classifyBindingMode(contacts){
+  var hbonds=0,hydrophobic=0,electrostatic=0,pipi=0;
+  contacts.pairs.forEach(function(p){
+    if(HBOND_DONORS.has(p.resnA)&&HBOND_DONORS.has(p.resnB))hbonds++;
+    if(HYDROPHOBIC.has(p.resnA)&&HYDROPHOBIC.has(p.resnB))hydrophobic++;
+    if((POS_CHARGED.has(p.resnA)&&NEG_CHARGED.has(p.resnB))||(NEG_CHARGED.has(p.resnA)&&POS_CHARGED.has(p.resnB)))electrostatic++;
+    if(PI_AROMATIC.has(p.resnA)&&PI_AROMATIC.has(p.resnB))pipi++;
+  });
+  return{hbonds:hbonds,hydrophobic:hydrophobic,electrostatic:electrostatic,pipi:pipi};
+}
+
+function usePersistentViewer(){
+  const containerRef=useRef(null);
+  const viewerRef=useRef(null);
+  const loadedPathRef=useRef(null);
+  const loadingRef=useRef(false);
+  const styleRef=useRef('rainbow');
+  const contactsRef=useRef(null);
+
+  const applyStyle=(v,styleName,skipRender)=>{
+    if(!v)return;
+    v.removeAllSurfaces();
+    v.removeAllLabels();
+    v.removeAllShapes();
+    contactsRef.current=null;
+    if(styleName==='rainbow'){
+      v.setStyle({},{cartoon:{color:'spectrum',opacity:0.92}});
+    }else if(styleName==='bychain'){
+      v.setStyle({chain:'A'},{cartoon:{color:'#00DDDD',opacity:0.92}});
+      v.setStyle({chain:'B'},{cartoon:{color:'#FF8C00',opacity:0.92}});
+      v.addSurface($3Dmol.SurfaceType.VDW,{opacity:0.15,color:'#00DDDD'},{chain:'A'});
+    }else if(styleName==='surface'){
+      v.setStyle({chain:'A'},{cartoon:{color:'#00DDDD',opacity:0.3}});
+      v.setStyle({chain:'B'},{cartoon:{color:'#FF8C00',opacity:0.3}});
+      v.addSurface($3Dmol.SurfaceType.VDW,{opacity:0.7,color:'#00DDDD'},{chain:'A'});
+      v.addSurface($3Dmol.SurfaceType.VDW,{opacity:0.7,color:'#FF8C00'},{chain:'B'});
+    }else if(styleName==='contact'){
+      v.setStyle({chain:'A'},{cartoon:{color:'#00DDDD',opacity:0.5}});
+      v.setStyle({chain:'B'},{cartoon:{color:'#FF8C00',opacity:0.5}});
+      var c=computeContacts(v);
+      contactsRef.current=c;
+      c.contactsA.forEach(function(r){
+        v.setStyle({chain:'A',resi:r.resi},{stick:{color:'#FF4444',radius:0.25},cartoon:{color:'#FF4444'}});
+      });
+      c.contactsB.forEach(function(r){
+        v.setStyle({chain:'B',resi:r.resi},{stick:{color:'#FFD700',radius:0.25},cartoon:{color:'#FFD700'}});
+      });
+      c.pairs.slice(0,10).forEach(function(p){
+        v.addCylinder({
+          start:{x:p.a.x,y:p.a.y,z:p.a.z},end:{x:p.b.x,y:p.b.y,z:p.b.z},
+          radius:0.04,color:'white',dashed:true,fromCap:1,toCap:1,
+        });
+        v.addLabel(p.dist.toFixed(1),{
+          position:{x:(p.a.x+p.b.x)/2,y:(p.a.y+p.b.y)/2,z:(p.a.z+p.b.z)/2},
+          fontSize:9,fontColor:'white',backgroundColor:'rgba(0,0,0,0.7)',
+          backgroundOpacity:0.7,borderThickness:0,
+        });
+      });
+    }else if(styleName==='stickCartoon'){
+      v.setStyle({chain:'A'},{cartoon:{color:'#00DDDD',opacity:0.4},stick:{color:'#00DDDD',radius:0.12}});
+      v.setStyle({chain:'B'},{cartoon:{color:'#FF8C00',opacity:0.4},stick:{color:'#FF8C00',radius:0.12}});
+    }
+    if(!skipRender)v.render();
+    styleRef.current=styleName;
+  };
+
+  const load=useCallback(async(path)=>{
+    if(!path||!containerRef.current)return;
+    if(path===loadedPathRef.current&&viewerRef.current)return;
+    if(loadingRef.current===path)return;
+    loadingRef.current=path;
+    if(viewerRef.current){try{viewerRef.current.clear();}catch(e){} viewerRef.current=null;}
+    containerRef.current.innerHTML='';
+    loadedPathRef.current=null;
+    contactsRef.current=null;
+    const url=`${API}${path.replace('/data/oih/outputs','/outputs')}`;
+    try{
+      const r=await fetch(url);
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      const data=await r.text();
+      if(loadingRef.current!==path||!containerRef.current||!data?.trim())return;
+      containerRef.current.innerHTML='';
+      const w=containerRef.current.clientWidth||600;
+      const v=$3Dmol.createViewer(containerRef.current,{backgroundColor:'#0f1117',width:w,height:400});
+      const fmt=path.endsWith('.cif')?'cif':'pdb';
+      v.addModel(data,fmt);
+      applyStyle(v,styleRef.current);
+      v.zoomTo();v.zoom(0.8);v.render();
+      viewerRef.current=v;
+      loadedPathRef.current=path;
+    }catch(e){
+      if(loadingRef.current===path&&containerRef.current){
+        containerRef.current.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-size:12px">Error: ${e.message}</div>`;
+      }
+    }finally{
+      if(loadingRef.current===path)loadingRef.current=false;
+    }
+  },[]);
+
+  return{containerRef,viewerRef,load,loadedPathRef,applyStyle,styleRef,contactsRef};
+}
+
+/* Persistent viewer wrapper — stays in DOM, uses display to show/hide */
+function Viewer3DPersistent({viewer3d,visible,path}){
+  const prevPathRef=useRef(null);
+  const[styleIdx,setStyleIdx]=useState(0);
+  const[contacts,setContacts]=useState(null);
+
+  useEffect(()=>{
+    if(!visible||!path)return;
+    if(path!==prevPathRef.current){
+      prevPathRef.current=path;
+      setContacts(null);
+      viewer3d.load(path);
+    }
+  },[visible,path]);
+
+  useEffect(()=>{
+    if(visible&&viewer3d.viewerRef.current&&viewer3d.loadedPathRef.current){
+      const v=viewer3d.viewerRef.current;
+      try{v.resize();v.render();}catch(e){}
+    }
+  },[visible]);
+
+  const v=()=>viewer3d.viewerRef.current;
+  const doZoomIn=()=>{if(v()){v().zoom(1.2,400);v().render()}};
+  const doZoomOut=()=>{if(v()){v().zoom(0.8,400);v().render()}};
+  const doReset=()=>{
+    if(v()){v().zoomTo();v().zoom(0.8);v().render();}
+    setContacts(null);
+    if(v())viewer3d.applyStyle(v(),VIEW_STYLES[styleIdx]);
+  };
+  const doCenter=()=>{if(v()){v().center();v().render()}};
+  const doStyle=(idx)=>{
+    const next=idx!==undefined?idx:(styleIdx+1)%VIEW_STYLES.length;
+    setStyleIdx(next);
+    if(v())viewer3d.applyStyle(v(),VIEW_STYLES[next]);
+    if(VIEW_STYLES[next]==='contact'&&viewer3d.contactsRef.current){
+      const c=viewer3d.contactsRef.current;
+      setContacts(Object.assign({},c,{mode:classifyBindingMode(c)}));
+    }else{
+      setContacts(null);
+    }
+  };
+
+  const tbtn='w-8 h-8 flex items-center justify-center rounded-lg text-sm text-white/80 hover:text-white hover:bg-white/15 transition-all cursor-pointer select-none';
+  const sbtn=(active)=>`px-2 py-1 rounded text-xs font-medium cursor-pointer select-none transition-all ${active?'bg-cyan/20 text-cyan border border-cyan/40':'text-white/60 hover:text-white hover:bg-white/10 border border-transparent'}`;
+
+  return(
+    <div style={{display:visible?'block':'none',padding:'0 16px 16px 16px'}}>
+      {/* Style buttons bar */}
+      <div style={{display:'flex',gap:4,marginBottom:8,flexWrap:'wrap'}}>
+        {VIEW_STYLES.map((s,i)=>(
+          <button key={s} className={sbtn(styleIdx===i)} onClick={()=>doStyle(i)}>
+            {VIEW_STYLE_ICON[s]} {VIEW_STYLE_LABEL[s]}
+          </button>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:12}}>
+        {/* 3D viewer */}
+        <div style={{position:'relative',flex:'1 1 0'}}>
+          <div ref={viewer3d.containerRef} className="mol3d border border-border"/>
+          {/* Toolbar — left bottom */}
+          <div style={{position:'absolute',left:8,bottom:8,display:'flex',flexDirection:'column',gap:2,
+            background:'rgba(0,0,0,0.45)',backdropFilter:'blur(8px)',borderRadius:8,padding:3}}>
+            <button className={tbtn} onClick={doZoomIn} title="Zoom in">+</button>
+            <button className={tbtn} onClick={doZoomOut} title="Zoom out">\u2212</button>
+            <button className={tbtn} onClick={doReset} title="Reset view">\u27F3</button>
+            <button className={tbtn} onClick={doCenter} title="Center">\u2295</button>
+          </div>
+          {/* Legend — right bottom */}
+          <div style={{position:'absolute',right:8,bottom:8,
+            background:'rgba(0,0,0,0.5)',borderRadius:6,padding:'4px 8px',
+            fontSize:10,fontFamily:'IBM Plex Mono',color:'rgba(255,255,255,0.5)',
+            pointerEvents:'none',lineHeight:1.6}}>
+            {styleIdx>=1&&<><span style={{color:'#00DDDD'}}>{'\u25A0'}</span> Binder &nbsp;<span style={{color:'#FF8C00'}}>{'\u25A0'}</span> Antigen<br/></>}
+            {styleIdx===3&&<><span style={{color:'#FF4444'}}>{'\u25A0'}</span> Contact(A) &nbsp;<span style={{color:'#FFD700'}}>{'\u25A0'}</span> Contact(B)<br/></>}
+            {'\u5DE6\u952E\u65CB\u8F6C \u00B7 \u53F3\u952E\u5E73\u79FB \u00B7 \u6EDA\u8F6E\u7F29\u653E'}
+          </div>
+        </div>
+        {/* Interface analysis panel — only in contact mode */}
+        {contacts&&(
+          <div style={{width:220,flexShrink:0,background:'rgba(15,17,23,0.8)',border:'1px solid rgba(255,255,255,0.1)',
+            borderRadius:8,padding:12,fontSize:11,fontFamily:'IBM Plex Mono',color:'rgba(255,255,255,0.8)',
+            overflowY:'auto',maxHeight:400}}>
+            <div style={{fontWeight:'bold',fontSize:12,marginBottom:8,color:'#00DDDD'}}>Interface Analysis</div>
+            <div style={{color:'rgba(255,255,255,0.5)',marginBottom:6}}>Contacts: {contacts.contactsA.length+contacts.contactsB.length} residues ({contacts.pairs.length} pairs)</div>
+            <div style={{marginBottom:8}}>
+              <div style={{color:'#FF4444',fontWeight:'bold',fontSize:10,marginBottom:2}}>Binder ({contacts.contactsA.length})</div>
+              <div style={{color:'rgba(255,255,255,0.6)',fontSize:10,lineHeight:1.4,wordBreak:'break-all'}}>
+                {contacts.contactsA.map(function(r){return r.resn+r.resi}).join(', ')}
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{color:'#FFD700',fontWeight:'bold',fontSize:10,marginBottom:2}}>Antigen ({contacts.contactsB.length})</div>
+              <div style={{color:'rgba(255,255,255,0.6)',fontSize:10,lineHeight:1.4,wordBreak:'break-all'}}>
+                {contacts.contactsB.map(function(r){return r.resn+r.resi}).join(', ')}
+              </div>
+            </div>
+            <div style={{borderTop:'1px solid rgba(255,255,255,0.1)',paddingTop:8}}>
+              <div style={{fontWeight:'bold',fontSize:10,marginBottom:4,color:'rgba(255,255,255,0.7)'}}>Binding Mode</div>
+              <div style={{lineHeight:1.8,fontSize:10}}>
+                <div>{'\uD83D\uDD35'} H-bonds: {contacts.mode.hbonds}</div>
+                <div>{'\uD83D\uDFE1'} Hydrophobic: {contacts.mode.hydrophobic}</div>
+                <div>{'\uD83D\uDD34'} Electrostatic: {contacts.mode.electrostatic}</div>
+                <div>{'\uD83D\uDFE2'} Pi-Pi: {contacts.mode.pipi}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Chart.js helper ──────────────────────────────────────────────────────── */
+const CHART_DARK={
+  bg:'#161b27',grid:'rgba(255,255,255,0.05)',font:'#a0aec0',
+  cyan:'#00d4ff',purple:'#a78bfa',ok:'#34d399',warn:'#fbbf24',bad:'#f87171',
+  blue:'#60a5fa',pink:'#f472b6',
+};
+function ChartBox({config,height=250,summary}){
+  const ref=useRef(null);
+  const chartRef=useRef(null);
+  useEffect(()=>{
+    if(!ref.current||!config)return;
+    if(chartRef.current){chartRef.current.destroy();chartRef.current=null;}
+    const ctx=ref.current.getContext('2d');
+    chartRef.current=new Chart(ctx,config);
+    return()=>{if(chartRef.current){chartRef.current.destroy();chartRef.current=null;}};
+  },[JSON.stringify(config)]);
+  return(<div>
+    <div style={{height:height+'px',position:'relative'}}><canvas ref={ref}/></div>
+    {summary&&<div className="flex gap-4 mt-2 text-[10px] font-mono text-[#a0aec0]">{summary.map((s,i)=>
+      <span key={i}><span className="text-[#e2e8f0]">{s.label}:</span> {s.value}</span>
+    )}</div>}
+  </div>);
+}
+function noDataPlaceholder(label){
+  return <div className="flex items-center justify-center text-[#94a3b8] text-xs font-mono" style={{height:'120px'}}>暂无{label}数据</div>;
+}
+/* chart theme defaults */
+const chartScaleDefaults={
+  grid:{color:CHART_DARK.grid},
+  ticks:{color:CHART_DARK.font,font:{size:10,family:'IBM Plex Mono'}},
+  border:{color:CHART_DARK.grid},
+};
+
+/* ── RDKit 2D mol ─────────────────────────────────────────────────────────── */
+let _rdkReady=null;
+function ensureRDKit(){
+  if(!_rdkReady) _rdkReady=window.initRDKitModule().then(m=>{window.RDKitModule=m;return m});
+  return _rdkReady;
+}
+function Mol2D({smiles,w=280,h=180,label}){
+  const ref=useRef(null);
+  useEffect(()=>{
+    if(!smiles||!ref.current)return;
+    ensureRDKit().then(RDKit=>{
+      try{
+        const mol=RDKit.get_mol(smiles);
+        const svg=mol.get_svg_with_highlights(JSON.stringify({
+          width:w,height:h,
+          backgroundColour:[10/255,14/255,26/255,1],
+          highlightColour:[0,0.83,1,0.2],
+          bondLineWidth:1.5,
+        }));
+        ref.current.innerHTML=svg;
+        mol.delete();
+      }catch{
+        ref.current.innerHTML=`<div class="text-[#94a3b8] text-xs p-3">${smiles.slice(0,50)}...</div>`;
+      }
+    });
+  },[smiles,w,h]);
+  return(
+    <div className="inline-block">
+      <div ref={ref}/>
+      {label&&<p className="text-[10px] text-[#a0aec0] text-center mt-1 font-mono">{label}</p>}
+    </div>
+  );
+}
+
+/* ── ADMET Radar (canvas) ─────────────────────────────────────────────────── */
+function AdmetRadar({data}){
+  // data = {logS:-1.5,logD:0.4,BBB:0.8,Tox:0.1,...}
+  const ref=useRef(null);
+  useEffect(()=>{
+    if(!ref.current||!data)return;
+    const c=ref.current,ctx=c.getContext('2d');
+    const W=c.width=200,H=c.height=200,cx=W/2,cy=H/2,R=70;
+    ctx.clearRect(0,0,W,H);
+    const keys=Object.keys(data).slice(0,6);
+    const n=keys.length; if(!n)return;
+    // draw grid
+    for(let ring=1;ring<=3;ring++){
+      ctx.beginPath();
+      for(let i=0;i<=n;i++){
+        const a=Math.PI*2*i/n-Math.PI/2;
+        const r=R*ring/3;
+        i===0?ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+      }ctx.closePath();ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.stroke();}
+    // labels
+    ctx.font='10px IBM Plex Mono';ctx.fillStyle='#94a3b8';ctx.textAlign='center';
+    keys.forEach((k,i)=>{
+      const a=Math.PI*2*i/n-Math.PI/2;
+      ctx.fillText(k,cx+(R+18)*Math.cos(a),cy+(R+18)*Math.sin(a)+3);});
+    // data polygon
+    ctx.beginPath();
+    keys.forEach((k,i)=>{
+      const a=Math.PI*2*i/n-Math.PI/2;
+      const v=Math.min(1,Math.max(0,Number(data[k])||0));
+      const r=R*v;
+      i===0?ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+    });ctx.closePath();
+    ctx.fillStyle='rgba(0,212,255,0.12)';ctx.fill();
+    ctx.strokeStyle='#00d4ff';ctx.lineWidth=1.5;ctx.stroke();
+    // dots
+    keys.forEach((k,i)=>{
+      const a=Math.PI*2*i/n-Math.PI/2;
+      const v=Math.min(1,Math.max(0,Number(data[k])||0));
+      const r=R*v;
+      ctx.beginPath();ctx.arc(cx+r*Math.cos(a),cy+r*Math.sin(a),3,0,Math.PI*2);
+      ctx.fillStyle='#00d4ff';ctx.fill();
+    });
+  },[data]);
+  return <canvas ref={ref} width={200} height={200}/>;
+}
+
+/* ── Progress bar ─────────────────────────────────────────────────────────── */
+function Bar({value=0,color='#00d4ff'}){
+  return(
+    <div className="h-1 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.08)'}}>
+      <div className="h-full rounded-full transition-all duration-700 bar-glow"
+        style={{width:`${Math.min(100,value)}%`,background:color,color}}/>
+    </div>
+  );
+}
+
+/* ── Timeline Node ────────────────────────────────────────────────────────── */
+function TimelineNode({task,isLast,selected,onSelect,onCancel}){
+  const s=ST[task.status]||ST.pending;
+  const elapsed=task.started_at&&task.completed_at
+    ?((new Date(task.completed_at)-new Date(task.started_at))/1000).toFixed(0)+'s'
+    :task.started_at?'..':'';
+  return(
+    <div className="relative pl-9 pb-4 float-in">
+      {!isLast&&<div className="tl-line"/>}
+      {/* dot */}
+      <div className="absolute left-2 top-1.5 w-[18px] h-[18px] rounded-full flex items-center justify-center"
+        style={{border:`2px solid ${s.c}`}}>
+        {task.status==='running'&&<>
+          <div className="absolute inset-0 rounded-full" style={{border:`2px solid ${s.c}`,animation:'pulse-ring 1.5s ease-out infinite'}}/>
+          <div className="w-2 h-2 rounded-full" style={{background:s.c}}/>
+        </>}
+        {task.status==='completed'&&<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2 2 4-4" stroke={s.c} strokeWidth="1.5" fill="none"/></svg>}
+        {task.status==='failed'&&<svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 3l4 4M7 3l-4 4" stroke={s.c} strokeWidth="1.5" fill="none"/></svg>}
+        {task.status==='pending'&&<div className="w-1.5 h-1.5 rounded-full bg-gray-600"/>}
+      </div>
+      {/* content — clickable */}
+      <div onClick={()=>onSelect?.(task.task_id)}
+        className={`rounded-lg px-3 py-2 cursor-pointer transition-all ${selected?'glass-strong border border-cyan/40':'glass hover:border-cyan/20'}`}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-semibold" style={{color:s.c}}>
+            {TOOL_LABEL[task.tool]||task.tool}
+          </span>
+          <span className="flex-1"/>
+          {elapsed&&<span className="text-[10px] text-[#94a3b8] font-mono">{elapsed}</span>}
+          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{color:s.c,background:`${s.c}15`}}>{s.label}</span>
+          {task.status==='running'&&onCancel&&(
+            <button onClick={e=>{e.stopPropagation();onCancel(task.task_id)}}
+              className="w-3 h-3 flex items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 hover:bg-red-500/40 transition-all"
+              title="Cancel task">
+              <span className="text-[8px] text-[#f87171] leading-none">×</span>
+            </button>
+          )}
+        </div>
+        {task.status==='running'&&<Bar value={task.progress||0}/>}
+        {task.progress_msg&&<p className="text-[10px] text-[#a0aec0] mt-1 truncate">{task.progress_msg}</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ── Tab bar ──────────────────────────────────────────────────────────────── */
+function Tabs({items,active,onSelect,runningTools,recentDone}){
+  return(
+    <div className="flex items-center gap-1 px-4 pt-3 pb-0 overflow-x-auto">
+      {items.map(t=>{
+        const isActive=active===t.id;
+        const isRunning=runningTools?.size>0&&t.id!=='chat'&&t.id!=='hub';
+        const isDone=recentDone?.size>0&&t.id!=='chat'&&t.id!=='hub';
+        let cls='text-[#a0aec0] hover:text-[#e2e8f0] hover:bg-white/[0.03]';
+        if(isActive) cls='glass-strong text-cyan border-b-2 border-cyan';
+        else if(isRunning) cls='text-cyan/80 border-b-2 tab-running';
+        else if(isDone) cls='text-ok/80 border-b-2 tab-done';
+        return(
+          <button key={t.id} onClick={()=>onSelect(t.id)}
+            className={`px-3 py-1.5 text-[11px] font-mono rounded-t-lg transition-all whitespace-nowrap ${cls}`}>
+            {t.icon&&<span className="mr-1.5">{t.icon}</span>}{t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Download helper ──────────────────────────────────────────────────────── */
+function DlBtn({path,label="Download"}){
+  if(!path)return null;
+  return(
+    <a href={`${API}${path.replace('/data/oih/outputs','/outputs')}`} download
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono text-cyan
+        border border-cyan/30 rounded hover:bg-cyan/10 transition-all">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 6l3 3 3-3M2 10h8" stroke="currentColor" strokeWidth="1.2"/></svg>
+      {label}
+    </a>
+  );
+}
+
+/* ── GPU Indicator ────────────────────────────────────────────────────────── */
+function GpuDot({health}){
+  if(!health)return <div className="w-2.5 h-2.5 rounded-full bg-gray-700"/>;
+  const q=health.task_queue||{};
+  const busy=(q.gpu_active||0)>0;
+  return(
+    <div className="flex items-center gap-2">
+      <div className={`w-2.5 h-2.5 rounded-full ${busy?'bg-warn':'bg-ok'} ${busy?'':'glow-cyan'}`}/>
+      <span className="text-[10px] font-mono text-[#a0aec0]">GPU {busy?'BUSY':'IDLE'}</span>
+    </div>
+  );
+}
+
+/* ── Copy button ─────────────────────────────────────────────────────────── */
+function CopyBtn({text}){
+  const[ok,setOk]=useState(false);
+  if(!text)return null;
+  return(<button onClick={()=>{navigator.clipboard.writeText(text);setOk(true);setTimeout(()=>setOk(false),1500)}}
+    className="inline-flex items-center px-1 py-0.5 text-[9px] font-mono text-[#a0aec0] hover:text-cyan transition-all"
+    title="Copy">{ok?'✓':'📋'}</button>);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  MAIN APP                                                                  */
+/* ══════════════════════════════════════════════════════════════════════════ */
+function App(){
+  const[sessionId]=useState(()=>'oih-'+Date.now());
+  const[tasks,setTasks]=useState([]);
+  const[health,setHealth]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const[activeTab,setActiveTab]=useState('chat');
+  const[chat,setChat]=useState([]);
+  const[chatInput,setChatInput]=useState('');
+  const[rd,setRd]=useState({});  // result data
+  const chatEndRef=useRef(null);
+  const chatInputRef=useRef(null);
+  // Results Hub state
+  const[hubTool,setHubTool]=useState(null);   // selected tool group
+  const[hubTask,setHubTask]=useState(null);    // selected task_id
+  // Tab highlight state
+  const[runningTools,setRunningTools]=useState(new Set());
+  const[recentDone,setRecentDone]=useState(new Set()); // tools that just completed (3s green)
+  // Pipeline preview
+  const[showPreview,setShowPreview]=useState(true);
+  // Selected task (left sidebar click → right panel)
+  const[selectedTaskId,setSelectedTaskId]=useState(null);
+  const[userLocked,setUserLocked]=useState(false); // user manually clicked, don't auto-switch
+  const[newTaskToast,setNewTaskToast]=useState(null); // toast for new running task
+  const[viewerPath,setViewerPath]=useState(null); // explicit 3D viewer path (from "View 3D" buttons)
+  const viewer3d=usePersistentViewer(); // persistent 3Dmol viewer — never unmounts
+  const[pipelineStarted,setPipelineStarted]=useState(false); // true once a task_id appears while loading
+  const[onboardBanner,setOnboardBanner]=useState(false); // onboarding hints banner
+
+  // Cancel task helper
+  const cancelTask=async(taskId)=>{
+    if(!window.confirm(`Cancel task ${taskId.slice(0,8)}?`))return;
+    try{
+      const r=await fetch(`${API}/api/v1/tasks/${taskId}`,{method:'DELETE'});
+      if(!r.ok){const d=await r.json();alert(d.detail||'Cancel failed')}
+    }catch(e){console.error('Cancel failed:',e)}
+  };
+
+  // ── Attachment state ──
+  const[attachPdb,setAttachPdb]=useState(null);    // {filename, content}
+  const[attachFasta,setAttachFasta]=useState(null); // string
+  const[attachSmiles,setAttachSmiles]=useState(null); // string
+  const[showAttachMenu,setShowAttachMenu]=useState(false);
+  const[pasteModal,setPasteModal]=useState(null);    // 'fasta' | 'smiles' | null
+  const[pasteValue,setPasteValue]=useState('');
+  const pdbInputRef=useRef(null);
+  const attachMenuRef=useRef(null);
+
+  // close menu on outside click
+  useEffect(()=>{
+    if(!showAttachMenu)return;
+    const handler=e=>{if(attachMenuRef.current&&!attachMenuRef.current.contains(e.target))setShowAttachMenu(false)};
+    document.addEventListener('mousedown',handler);
+    return()=>document.removeEventListener('mousedown',handler);
+  },[showAttachMenu]);
+
+  const handlePdbFile=e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=()=>setAttachPdb({filename:file.name,content:reader.result});
+    reader.readAsText(file);
+    setShowAttachMenu(false);
+    e.target.value='';
+  };
+  const confirmPaste=()=>{
+    if(pasteModal==='fasta'&&pasteValue.trim())setAttachFasta(pasteValue.trim());
+    if(pasteModal==='smiles'&&pasteValue.trim())setAttachSmiles(pasteValue.trim());
+    setPasteModal(null);setPasteValue('');
+  };
+
+  // parse PTM info from assistant response
+  const parsePtmCard=(text)=>{
+    const lines=[];
+    const ptmMatch=text.match(/\[PTM检测[：:]?\s*([^\]]+)\]/);
+    if(ptmMatch)lines.push({type:'title',text:'🔬 PTM 检测结果'});
+    // extract individual items
+    const items=[...text.matchAll(/(?:糖基化|磷酸化|二硫键|甲基化|乙酰化)[^,\]）]*/g)];
+    items.forEach(m=>{
+      const t=m[0];
+      if(t.includes('不支持')||t.includes('GROMACS'))lines.push({type:'warn',text:'⚠️ '+t});
+      else lines.push({type:'ok',text:'✅ '+t});
+    });
+    const files=[...text.matchAll(/(?:af3_input|gromacs_ptm_notes|adc_input)\.json/g)];
+    files.forEach(m=>lines.push({type:'file',text:'📁 已生成 '+m[0]}));
+    return lines.length>1?lines:null;
+  };
+
+  // poll
+  useEffect(()=>{
+    let live=true;
+    const poll=async()=>{
+      try{
+        const[tR,hR]=await Promise.all([
+          fetch(`${API}/api/v1/tasks/?limit=40`).then(r=>r.ok?r.json():null).catch(()=>null),
+          fetch(`${API}/health`).then(r=>r.ok?r.json():null).catch(()=>null),
+        ]);
+        if(!live)return;
+        if(tR?.tasks){
+          setTasks(tR.tasks);
+          // track running/recently-done tools for tab highlights
+          const nowRunning=new Set(tR.tasks.filter(t=>t.status==='running').map(t=>t.tool));
+          const nowRunningIds=new Set(tR.tasks.filter(t=>t.status==='running').map(t=>t.task_id));
+          setRunningTools(prev=>{
+            for(const t of prev){
+              if(!nowRunning.has(t)){
+                setRecentDone(rd2=>{const s=new Set(rd2);s.add(t);setTimeout(()=>setRecentDone(rd3=>{const s2=new Set(rd3);s2.delete(t);return s2}),3000);return s});
+              }
+            }
+            // detect new running tasks for toast + pipeline started signal
+            for(const id of nowRunningIds){
+              if(!prev.has(tR.tasks.find(t=>t.task_id===id)?.tool)){
+                setNewTaskToast(id);
+                setTimeout(()=>setNewTaskToast(nt=>nt===id?null:nt),5000);
+                // Signal to Agent Chat that a pipeline task has started
+                setPipelineStarted(true);
+                setOnboardBanner(true);
+                setTimeout(()=>setOnboardBanner(false),8000);
+              }
+            }
+            return nowRunning;
+          });
+          // Auto-select: if not user-locked, pick latest running or completed
+          setSelectedTaskId(prev=>{
+            if(prev&&tR.tasks.find(t=>t.task_id===prev)) return prev; // keep if still exists
+            const running=tR.tasks.find(t=>t.status==='running');
+            if(running)return running.task_id;
+            const completed=tR.tasks.find(t=>t.status==='completed');
+            return completed?.task_id||prev;
+          });
+        }
+        if(hR)setHealth(hR);
+        // harvest result data
+        if(tR?.tasks){
+          const d={};
+          for(const t of tR.tasks){
+            if(t.status!=='completed'||!t.result)continue;
+            const r=t.result;
+            if(r.output_pdb)d.pdb=r.output_pdb;
+            if(r.cif_files?.length)d.cif=r.cif_files[0];
+            if(r.smiles)d.smiles=r.smiles;
+            if(r.isomeric_smiles)d.smiles=r.isomeric_smiles;
+            if(r.sdf_path)d.sdf=r.sdf_path;
+            if(r.poses)d.poses=r.poses;
+            if(r.output_sdf)d.docking_sdf=r.output_sdf;
+            if(r.output_files?.trajectory)d.trajectory=r.output_files.trajectory;
+            if(r.output_files?.energy)d.energy=r.output_files.energy;
+            if(r.output_files?.rmsd)d.rmsd=r.output_files.rmsd;
+            if(r.predictions)d.predictions=r.predictions;
+            if(r.conjugation_sites)d.sites=r.conjugation_sites;
+            if(r.selected_linkers)d.linkers=r.selected_linkers;
+            if(r.adc_smiles)d.adc_smiles=r.adc_smiles;
+            if(r.linker_smiles)d.linker_smiles=r.linker_smiles;
+            if(r.payload_smiles)d.payload_smiles=r.payload_smiles;
+            if(r.pdb_files?.length)d.pdb=r.pdb_files[0];
+            if(r.sim_time_ns)d.sim_ns=r.sim_time_ns;
+            // Binder/ADC pipeline full result
+            if(r.steps&&r.adc_design){
+              d.pipeline=r;
+              // Extract structure from best AF3 design
+              const vd=r.steps?.af3_validation?.validated_designs;
+              if(vd?.length&&vd[0].af3_structure_path){
+                const dir=vd[0].af3_structure_path;
+                // AF3 outputs CIF files in the dir
+                if(!d.cif&&!d.pdb)d.pdb=dir;
+              }
+            }
+          }
+          setRd(prev=>({...prev,...d}));
+        }
+      }catch{}
+    };
+    poll();const id=setInterval(poll,2000);
+    return()=>{live=false;clearInterval(id)};
+  },[]);
+
+  useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:'smooth'})},[chat,loading]);
+
+  // dynamic tabs
+  const tabs=useMemo(()=>{
+    const t=[{id:'chat',label:'Agent Chat',icon:'💬'}];
+    if(rd.pdb||rd.cif||viewerPath) t.push({id:'protein',label:'Protein 3D',icon:'🧬'});
+    if(rd.smiles) t.push({id:'ligand',label:'Small Molecule',icon:'💊'});
+    if(rd.poses) t.push({id:'dock',label:'Docking',icon:'🎯'});
+    if(rd.predictions) t.push({id:'admet',label:'ADMET',icon:'📊'});
+    if(rd.sites) t.push({id:'sites',label:'Conjugation Sites',icon:'📍'});
+    if(rd.linkers||rd.linker_smiles) t.push({id:'linker',label:'Linker',icon:'🔗'});
+    if(rd.payload_smiles) t.push({id:'payload',label:'Payload',icon:'💣'});
+    if(rd.adc_smiles) t.push({id:'adc',label:'ADC Assembly',icon:'🧪'});
+    if(rd.trajectory) t.push({id:'md',label:'MD Results',icon:'⚡'});
+    if(rd.pipeline) t.push({id:'pipeline',label:'Pipeline Results',icon:'📋'});
+    t.push({id:'hub',label:'Results Hub',icon:'🗂️'});
+    return t;
+  },[rd,viewerPath]);
+
+  // core send function
+  const doSend=async(msg)=>{
+    if(!msg.trim()||loading)return;
+    setActiveTab('chat');  // auto-switch to chat tab
+    // build attachment summary for user bubble
+    const attachLabels=[];
+    if(attachPdb)attachLabels.push(`📄 ${attachPdb.filename}`);
+    if(attachFasta)attachLabels.push(`🧬 序列 ${attachFasta.replace(/^>[^\n]*\n/,'').replace(/\s/g,'').length}aa`);
+    if(attachSmiles)attachLabels.push(`💊 ${attachSmiles.length>30?attachSmiles.slice(0,27)+'...':attachSmiles}`);
+    const userEntry={role:'user',content:msg,attachLabels:attachLabels.length?attachLabels:null};
+    setChat(h=>[...h,userEntry]);
+    setLoading(true);
+    // build request body
+    const body={message:msg,session_id:sessionId};
+    if(attachPdb){body.pdb_content=attachPdb.content;body.filename=attachPdb.filename}
+    if(attachFasta)body.fasta_sequence=attachFasta;
+    if(attachSmiles)body.smiles=attachSmiles;
+    // clear attachments after send
+    setAttachPdb(null);setAttachFasta(null);setAttachSmiles(null);
+    // snapshot task count before request to detect new tasks on timeout
+    const taskCountBefore=tasks.length;
+    const taskIdsBefore=new Set(tasks.map(t=>t.task_id));
+    try{
+      const ctrl=new AbortController();
+      const tid=setTimeout(()=>ctrl.abort(),1800000); // 30min timeout
+      const res=await fetch(`${API}/api/v1/agent/chat`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+        signal:ctrl.signal,
+      });
+      clearTimeout(tid);
+      const d=await res.json();
+      const reply=d.reply||d.response||d.answer||JSON.stringify(d);
+      setChat(h=>[...h,{role:'assistant',content:reply}]);
+    }catch(e){
+      // On timeout/abort, check if pipeline tasks were spawned during the request
+      const isTimeout=e.name==='AbortError'||/timeout/i.test(e.message);
+      if(isTimeout){
+        // Check current tasks to see if new ones appeared
+        try{
+          const snap=await fetch(`${API}/api/v1/tasks/?limit=40`).then(r=>r.json()).catch(()=>null);
+          const newTasks=(snap?.tasks||[]).filter(t=>!taskIdsBefore.has(t.task_id));
+          if(newTasks.length>0){
+            setChat(h=>[...h,{role:'assistant',content:'⚡ **Pipeline is running** — track progress in the left panel. The agent request timed out but '+newTasks.length+' task(s) were launched successfully.'}]);
+          }else{
+            setChat(h=>[...h,{role:'assistant',content:'Request timed out (30min). No new tasks were detected — the agent may still be planning. Try a simpler request or check /tmp/fastapi.log.'}]);
+          }
+        }catch(_){
+          setChat(h=>[...h,{role:'assistant',content:'Request timed out. Check the left panel for any running tasks.'}]);
+        }
+      }else{
+        setChat(h=>[...h,{role:'assistant',content:`Error: ${e.message}`}]);
+      }
+    }finally{setLoading(false);setPipelineStarted(false)}
+  };
+
+  // chat input send
+  const sendChat=()=>{
+    if(!chatInput.trim())return;
+    const msg=chatInput.trim();
+    setChatInput('');
+    setShowPreview(true); // reset for next input
+    doSend(msg);
+  };
+
+  /* ── tab content renderer ── */
+  const tabContent=()=>{
+    switch(activeTab){
+
+    case 'protein':
+      const proteinPath=viewerPath||rd.cif||rd.pdb;
+      return(<div className="p-4" style={{maxHeight:'calc(100vh - 120px)',overflow:'hidden'}}>
+        <div className="flex items-center justify-between mb-3" style={{height:'40px'}}>
+          <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">Protein Structure</h3>
+          <div className="flex items-center gap-2">
+            {viewerPath&&viewerPath!==(rd.cif||rd.pdb)&&(
+              <button onClick={()=>setViewerPath(null)} className="text-[10px] font-mono text-[#a0aec0] hover:text-[#e2e8f0] transition-all">Back to default</button>
+            )}
+            <DlBtn path={proteinPath} label={proteinPath?.endsWith('.cif')?'Download CIF':'Download PDB'}/>
+          </div>
+        </div>
+        <div className="text-[10px] font-mono text-[#a0aec0] mb-2 truncate">{proteinPath?.split('/').pop()}</div>
+        {/* viewer container is rendered below, outside switch/case */}
+      </div>);
+
+    case 'ligand':
+      return(<div className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">Small Molecule</h3>
+          <DlBtn path={rd.sdf} label="Download SDF"/>
+        </div>
+        <div className="flex items-start gap-6">
+          <Mol2D smiles={rd.smiles} w={320} h={220}/>
+          <div className="text-xs text-[#a0aec0] space-y-2 font-mono">
+            <p className="text-cyan">SMILES</p>
+            <p className="text-[#e2e8f0] break-all max-w-sm">{rd.smiles}</p>
+          </div>
+        </div>
+      </div>);
+
+    case 'dock':
+      return(<div className="p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">Docking Results</h3>
+          <DlBtn path={rd.docking_sdf} label="Download SDF"/>
+        </div>
+        <div className="space-y-1.5">
+          {(rd.poses||[]).slice(0,9).map((p,i)=>{
+            const aff=p.affinity_kcal_mol||p.minimizedAffinity;
+            const cnn=p.CNNscore;
+            return(
+              <div key={i} className="glass rounded-lg px-4 py-2.5 flex items-center gap-4">
+                <span className="text-xs font-mono text-cyan w-8">#{p.pose_id||i+1}</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-6 text-xs">
+                    <span className="text-[#a0aec0]">Affinity: <span className="text-[#e2e8f0] font-semibold">{aff} kcal/mol</span></span>
+                    {cnn!=null&&<span className="text-[#a0aec0]">CNN: <span className="text-ok font-semibold">{Number(cnn).toFixed(3)}</span></span>}
+                  </div>
+                  {aff&&<Bar value={Math.min(100,Math.abs(aff)*10)} color={Math.abs(aff)>7?'#22c55e':Math.abs(aff)>5?'#f59e0b':'#ef4444'}/>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>);
+
+    case 'admet':
+      return(<div className="p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">ADMET Predictions</h3>
+        </div>
+        <div className="flex gap-8">
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-xs font-mono">
+              <thead><tr className="text-[#a0aec0] border-b border-border">
+                {rd.predictions?.[0]&&Object.keys(rd.predictions[0]).map(k=>(
+                  <th key={k} className="px-3 py-2 text-left font-medium">{k}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {(rd.predictions||[]).map((row,i)=>(
+                  <tr key={i} className="border-b border-border/50 hover:bg-white/[0.02]">
+                    {Object.values(row).map((v,j)=>(
+                      <td key={j} className="px-3 py-2 text-[#e2e8f0]">{typeof v==='number'?v.toFixed(4):v}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rd.predictions?.[0]&&(()=>{
+            // build radar data: normalize values to 0-1 range
+            const row=rd.predictions[0];
+            const radarData={};
+            Object.entries(row).forEach(([k,v])=>{
+              if(k==='smiles')return;
+              // rough normalization
+              const n=Number(v);
+              if(isNaN(n))return;
+              radarData[k]=Math.min(1,Math.max(0,(n+10)/20)); // crude normalization for display
+            });
+            return <AdmetRadar data={radarData}/>;
+          })()}
+        </div>
+      </div>);
+
+    case 'sites':
+      return(<div className="p-4">
+        <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-4">Conjugation Sites (SASA &gt; 40 A&sup2;)</h3>
+        <div className="grid grid-cols-4 gap-2">
+          {(rd.sites||[]).map((s,i)=>(
+            <div key={i} className="glass rounded-lg px-3 py-2 text-center">
+              <span className="text-cyan font-mono font-bold text-sm">{s.residue||s}</span>
+              {s.sasa&&<p className="text-[10px] text-[#a0aec0] mt-0.5">{Number(s.sasa).toFixed(1)} A&sup2;</p>}
+              {s.type&&<p className="text-[10px] text-purple mt-0.5">{s.type}</p>}
+            </div>
+          ))}
+        </div>
+      </div>);
+
+    case 'linker':
+      return(<div className="p-4 space-y-3">
+        <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-2">Selected Linkers</h3>
+        {(rd.linkers||[]).map((l,i)=>(
+          <div key={i} className="glass rounded-lg p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-sm font-semibold text-cyan">{l.linker_name||l.name}</span>
+              {l.clinical_status&&<span className={`text-[10px] px-2 py-0.5 rounded-full font-mono
+                ${l.clinical_status==='approved'?'bg-ok/10 text-ok':'bg-warn/10 text-warn'}`}>{l.clinical_status}</span>}
+              {l.reaction_type&&<span className="text-[10px] px-2 py-0.5 rounded-full bg-purple/10 text-purple font-mono">{l.reaction_type}</span>}
+            </div>
+            {l.linker_smiles&&<Mol2D smiles={l.linker_smiles} w={260} h={130}/>}
+          </div>
+        ))}
+        {rd.linker_smiles&&!rd.linkers?.length&&(
+          <div className="glass rounded-lg p-4">
+            <Mol2D smiles={rd.linker_smiles} w={300} h={150} label="Linker"/>
+          </div>
+        )}
+      </div>);
+
+    case 'payload':
+      return(<div className="p-6">
+        <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-4">Payload</h3>
+        <div className="flex items-start gap-8">
+          <Mol2D smiles={rd.payload_smiles} w={320} h={220} label="Payload"/>
+          {rd.predictions&&<AdmetRadar data={Object.fromEntries(
+            Object.entries(rd.predictions[0]||{}).filter(([k])=>k!=='smiles').map(([k,v])=>[k,Math.min(1,Math.max(0,(Number(v)+10)/20))])
+          )}/>}
+        </div>
+      </div>);
+
+    case 'adc':
+      return(<div className="p-6">
+        <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-5">ADC Assembly</h3>
+        {/* three-part connected view */}
+        <div className="flex items-center gap-3 overflow-x-auto pb-4">
+          {/* antibody/site */}
+          <div className="glass rounded-xl p-4 text-center min-w-[160px]">
+            <div className="text-4xl mb-2">🧬</div>
+            <p className="text-xs text-cyan font-mono">Antibody</p>
+            {rd.sites?.[0]&&<p className="text-[10px] text-[#a0aec0] mt-1">Site: {rd.sites[0].residue||rd.sites[0]}</p>}
+          </div>
+          <div className="text-[#94a3b8] text-xl">—</div>
+          {/* linker */}
+          <div className="glass rounded-xl p-4 text-center min-w-[200px]">
+            {rd.linker_smiles
+              ?<Mol2D smiles={rd.linker_smiles} w={180} h={100}/>
+              :<div className="text-3xl mb-2">🔗</div>}
+            <p className="text-xs text-purple font-mono mt-1">Linker</p>
+          </div>
+          <div className="text-[#94a3b8] text-xl">—</div>
+          {/* payload */}
+          <div className="glass rounded-xl p-4 text-center min-w-[200px]">
+            {rd.payload_smiles
+              ?<Mol2D smiles={rd.payload_smiles} w={180} h={100}/>
+              :<div className="text-3xl mb-2">💣</div>}
+            <p className="text-xs text-bad font-mono mt-1">Payload</p>
+          </div>
+        </div>
+        {/* full conjugate */}
+        {rd.adc_smiles&&(
+          <div className="mt-6 glass rounded-xl p-5">
+            <p className="text-xs text-[#a0aec0] mb-3">Full Conjugate SMILES</p>
+            <Mol2D smiles={rd.adc_smiles} w={500} h={220} label="ADC Conjugate"/>
+            <p className="text-[10px] text-[#94a3b8] font-mono mt-2 break-all max-w-2xl">{rd.adc_smiles}</p>
+          </div>
+        )}
+      </div>);
+
+    case 'md':
+      return(<div className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">MD Simulation Results</h3>
+          <DlBtn path={rd.trajectory} label="Download .xtc"/>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            {label:'Trajectory',path:rd.trajectory,icon:'📈'},
+            {label:'Energy',path:rd.energy,icon:'⚡'},
+            {label:'RMSD',path:rd.rmsd,icon:'📏'},
+            {label:'Duration',value:rd.sim_ns?`${rd.sim_ns} ns`:'—',icon:'⏱'},
+          ].map((f,i)=>(
+            <div key={i} className="glass rounded-lg p-3 flex items-center gap-3">
+              <span className="text-xl">{f.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-[#a0aec0]">{f.label}</p>
+                <p className="text-xs text-[#e2e8f0] font-mono truncate">{f.value||f.path?.split('/').pop()||'—'}</p>
+              </div>
+              {f.path&&<DlBtn path={f.path} label="DL"/>}
+            </div>
+          ))}
+        </div>
+      </div>);
+
+    case 'pipeline':
+      const pl=rd.pipeline||{};
+      const plSteps=pl.steps||{};
+      const plAdc=pl.adc_design||{};
+      const plAf3=plSteps.af3_validation||{};
+      const plVd=plAf3.validated_designs||[];
+      const plRfd=plSteps.rfdiffusion||{};
+      const plMpnn=plSteps.proteinmpnn||{};
+      const bestDesign=plVd[0]||{};
+      const plFasta=plMpnn.designs?.[0]?.fasta_file;
+      const statCards=[
+        {icon:'🧬',label:'RFdiffusion',value:`${plRfd.pdb_files?.length||0} backbones`,sub:plRfd.output_dir?'completed':'—'},
+        {icon:'🔤',label:'ProteinMPNN',value:`${plMpnn.designs?.length||0} FASTA files`,sub:plMpnn.designs?.[0]?.fasta_file?'sequences designed':'—'},
+        {icon:'🔬',label:'AF3 Validation',value:`${plAf3.passed||0}/${plAf3.total_tested||0} passed`,sub:plAf3.best_iptm!=null?`best ipTM: ${plAf3.best_iptm}`:'—'},
+        {icon:'📍',label:'FreeSASA',value:plAdc.conjugation_site||'—',sub:plAdc.conjugation_sites?.[0]?.sasa?`SASA: ${Number(plAdc.conjugation_sites[0].sasa).toFixed(1)} Å²`:'—'},
+        {icon:'🔗',label:'Linker',value:plAdc.linker||'—',sub:plAdc.reaction_type||plAdc.reaction_type_used||'—'},
+        {icon:'💣',label:'ADC',value:plAdc.payload||'—',sub:plAdc.dar?`DAR=${plAdc.dar}`:'—'},
+      ];
+      // build download items
+      const dlItems=[];
+      if(bestDesign.af3_structure_path) dlItems.push({label:'Best PDB (AF3)',path:bestDesign.af3_structure_path});
+      if(plFasta) dlItems.push({label:'Sequences FASTA',path:plFasta});
+      if(plAdc.adc_structure_path) dlItems.push({label:'ADC Structure',path:plAdc.adc_structure_path});
+
+      return(<div className="p-4 space-y-5 overflow-y-auto">
+        <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">Pipeline Results — {pl.job_name||'Binder Design'}</h3>
+        {/* stat cards */}
+        <div className="grid grid-cols-3 gap-3">
+          {statCards.map((c,i)=>(
+            <div key={i} className="glass rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">{c.icon}</span>
+                <span className="text-[10px] text-[#a0aec0] font-mono uppercase">{c.label}</span>
+              </div>
+              <p className="text-sm font-semibold text-[#e2e8f0] font-mono">{c.value}</p>
+              <p className="text-[10px] text-[#a0aec0] mt-0.5 truncate">{c.sub}</p>
+            </div>
+          ))}
+        </div>
+        {/* AF3 validated designs table */}
+        {plVd.length>0&&(<div>
+          <h4 className="text-xs text-[#a0aec0] font-mono mb-2 mt-2">AF3 Validated Designs</h4>
+          <div className="space-y-1.5">
+            {plVd.map((d,i)=>(
+              <div key={i} className="glass rounded-lg px-4 py-2 flex items-center gap-4">
+                <span className="text-xs font-mono text-cyan w-6">#{d.rank}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${d.confidence==='high'?'bg-ok/10 text-ok':d.confidence==='low_confidence'?'bg-warn/10 text-warn':'bg-bad/10 text-bad'}`}>{d.confidence||'—'}</span>
+                <span className="text-xs text-[#e2e8f0] font-mono">ipTM: <span className="font-semibold">{d.iptm!=null?d.iptm:'—'}</span></span>
+                <span className="text-xs text-[#a0aec0] font-mono">MPNN: {d.mpnn_score!=null?Number(d.mpnn_score).toFixed(3):'—'}</span>
+                <span className="flex-1 text-[10px] text-[#a0aec0] font-mono truncate">{d.sequence?.slice(0,40)}...</span>
+              </div>
+            ))}
+          </div>
+        </div>)}
+        {/* ADC summary */}
+        {plAdc.nanobody_sequence&&(<div className="glass rounded-xl p-4 mt-2">
+          <h4 className="text-xs text-[#a0aec0] font-mono mb-3">ADC Assembly Summary</h4>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs font-mono">
+            <div><span className="text-[#a0aec0]">Nanobody: </span><span className="text-[#e2e8f0]">{plAdc.nanobody_sequence?.slice(0,30)}...</span></div>
+            <div><span className="text-[#a0aec0]">ipTM: </span><span className="text-cyan font-semibold">{plAdc.iptm||'—'}</span></div>
+            <div><span className="text-[#a0aec0]">Site: </span><span className="text-[#e2e8f0]">{plAdc.conjugation_site||'—'}</span></div>
+            <div><span className="text-[#a0aec0]">Linker: </span><span className="text-purple">{plAdc.linker||'—'}</span></div>
+            <div><span className="text-[#a0aec0]">Payload: </span><span className="text-[#e2e8f0]">{plAdc.payload||'—'}</span></div>
+            <div><span className="text-[#a0aec0]">DAR: </span><span className="text-[#e2e8f0]">{plAdc.dar||'—'}</span></div>
+          </div>
+          {plAdc.adc_smiles&&(<div className="mt-3">
+            <Mol2D smiles={plAdc.adc_smiles} w={400} h={180} label="ADC Conjugate"/>
+          </div>)}
+        </div>)}
+        {/* downloads */}
+        <div>
+          <h4 className="text-xs text-[#a0aec0] font-mono mb-2">Downloads</h4>
+          <div className="flex flex-wrap gap-2">
+            {dlItems.map((d,i)=><DlBtn key={i} path={d.path} label={d.label}/>)}
+            <button onClick={()=>{
+              const blob=new Blob([JSON.stringify(pl,null,2)],{type:'application/json'});
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement('a');a.href=url;a.download=`${pl.job_name||'pipeline'}_report.json`;a.click();URL.revokeObjectURL(url);
+            }} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono text-cyan border border-cyan/30 rounded hover:bg-cyan/10 transition-all">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 6l3 3 3-3M2 10h8" stroke="currentColor" strokeWidth="1.2"/></svg>
+              Full Report (JSON)
+            </button>
+          </div>
+        </div>
+        {plAdc.error&&(<div className="glass rounded-lg p-3 border-bad/30 border">
+          <p className="text-xs text-bad font-mono">{plAdc.error}</p>
+          {plAdc.partial&&<p className="text-[10px] text-[#a0aec0] mt-1">Pipeline completed partially — some steps failed</p>}
+        </div>)}
+      </div>);
+
+    case 'hub':
+      // Group tasks by tool
+      const toolGroups={};
+      for(const t of tasks){
+        const key=t.tool||'unknown';
+        if(!toolGroups[key])toolGroups[key]=[];
+        toolGroups[key].push(t);
+      }
+      const sortedTools=Object.entries(toolGroups).sort((a,b)=>(b[1][0]?.created_at||'').localeCompare(a[1][0]?.created_at||''));
+      // Use selectedTaskId (from left sidebar) or hubTask (from hub tree)
+      const activeHubId=hubTask||selectedTaskId;
+      const selTask=activeHubId?tasks.find(t=>t.task_id===activeHubId):null;
+      const selResult=selTask?.result;
+      const _path=(p)=>p?<span className="inline-flex items-center gap-0.5 text-[10px] text-[#a0aec0] font-mono"><span className="truncate max-w-[200px] inline-block align-bottom">{p}</span><CopyBtn text={p}/></span>:'—';
+      const _val=(v,fmt)=>v!=null?(fmt?fmt(v):v):'—';
+
+      // Tool-specific result renderer
+      const View3DBtn=({path})=>{
+        if(!path)return null;
+        return(<button onClick={()=>{setViewerPath(path);setActiveTab('protein')}}
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-cyan border border-cyan/30 rounded hover:bg-cyan/10 transition-all">
+          <span>🔬</span>View 3D</button>);
+      };
+      const renderResult=(task,r)=>{
+        if(!r)return null;
+        const tool=task?.tool||'';
+        // fetch_pdb
+        if(tool==='fetch_pdb'||r.output_pdb) return(<div className="space-y-2 text-xs font-mono">
+          <div><span className="text-[#a0aec0]">PDB ID: </span><span className="text-[#e2e8f0]">{r.pdb_id||'—'}</span></div>
+          <div><span className="text-[#a0aec0]">Output: </span>{_path(r.output_pdb)}</div>
+          {r.chains&&<div><span className="text-[#a0aec0]">Chains: </span><span className="text-[#e2e8f0]">{JSON.stringify(r.chains)}</span></div>}
+        </div>);
+        // fpocket
+        if(tool==='fpocket'&&r.pockets) return(<div>
+          <h4 className="text-xs text-[#a0aec0] font-mono mb-2">{r.pockets.length} pockets found</h4>
+          <div className="space-y-1">{r.pockets.slice(0,5).map((p,i)=>(
+            <div key={i} className="glass rounded px-3 py-1.5 text-[10px] font-mono flex gap-4">
+              <span className="text-cyan">Pocket {i+1}</span>
+              <span className="text-[#e2e8f0]">Drug score: {_val(p.drug_score,v=>Number(v).toFixed(3))}</span>
+              <span className="text-[#a0aec0]">Vol: {_val(p.real_volume,v=>Number(v).toFixed(0))}ų</span>
+            </div>
+          ))}</div>
+        </div>);
+        // rfdiffusion
+        if(tool.includes('rfdiffusion')||(r.pdb_files?.length&&r.output_dir)){
+          const nBackbones=r.pdb_files?.length||r.num_designs||0;
+          const dur=task?.started_at&&task?.completed_at?((new Date(task.completed_at)-new Date(task.started_at))/1000).toFixed(0)+'s':null;
+          const plddt=r.pdb_files?.map((_,i)=>r.plddt_scores?.[i]??null)||[];
+          const hasPlddt=plddt.some(v=>v!=null);
+          const barColors=plddt.map(v=>v==null?CHART_DARK.grid:v>80?CHART_DARK.cyan:v>60?CHART_DARK.warn:CHART_DARK.bad);
+          const plddtChart=hasPlddt?{
+            type:'bar',
+            data:{labels:plddt.map((_,i)=>`${i+1}`),datasets:[{data:plddt,backgroundColor:barColors,borderWidth:0,borderRadius:2}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'pLDDT per backbone',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'Backbone #',color:CHART_DARK.font}},y:{...chartScaleDefaults,min:0,max:100,title:{display:true,text:'pLDDT',color:CHART_DARK.font}}}}
+          }:null;
+          const validPlddt=plddt.filter(v=>v!=null);
+          const plddtSummary=validPlddt.length?[
+            {label:'Mean',value:(validPlddt.reduce((a,b)=>a+b,0)/validPlddt.length).toFixed(1)},
+            {label:'Max',value:Math.max(...validPlddt).toFixed(1)},
+            {label:'Min',value:Math.min(...validPlddt).toFixed(1)},
+          ]:null;
+          return(<div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <h4 className="text-xs text-[#a0aec0] font-mono">{nBackbones} backbones generated</h4>
+              {dur&&<span className="text-[10px] text-[#94a3b8] font-mono">⏱ {dur}</span>}
+              <View3DBtn path={r.pdb_files?.[0]}/>
+            </div>
+            {r.output_dir&&<div className="text-[10px]"><span className="text-[#a0aec0]">Output: </span>{_path(r.output_dir)}</div>}
+            {plddtChart?<ChartBox config={plddtChart} height={220} summary={plddtSummary}/>:nBackbones>0?noDataPlaceholder('pLDDT'):null}
+          </div>);
+        }
+        // proteinmpnn
+        if(r.fasta_file||tool.includes('proteinmpnn')){
+          const seqs=r.sequences||r.designs||[];
+          const scores=seqs.map(s=>s.score??s.global_score??null).filter(v=>v!=null);
+          const bestIdx=scores.length?scores.indexOf(Math.min(...scores)):-1;
+          const scoreChart=scores.length>1?{
+            type:'line',
+            data:{labels:scores.map((_,i)=>`${i+1}`),datasets:[{
+              data:scores,borderColor:CHART_DARK.cyan,backgroundColor:CHART_DARK.cyan+'33',
+              pointBackgroundColor:scores.map((_,i)=>i===bestIdx?CHART_DARK.bad:CHART_DARK.cyan),
+              pointRadius:scores.map((_,i)=>i===bestIdx?6:2),fill:true,tension:0.3,borderWidth:1.5,
+            }]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'MPNN sequence scores',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'Design #',color:CHART_DARK.font}},y:{...chartScaleDefaults,title:{display:true,text:'Score (lower=better)',color:CHART_DARK.font}}}}
+          }:null;
+          const scoreSummary=scores.length?[
+            {label:'Best',value:Math.min(...scores).toFixed(3)},
+            {label:'Mean',value:(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(3)},
+            {label:'Count',value:scores.length},
+          ]:null;
+          return(<div className="space-y-3">
+            <div className="flex items-center gap-4 text-xs font-mono">
+              <span className="text-[#a0aec0]">FASTA: {_path(r.fasta_file)}</span>
+              {seqs.length>0&&<span className="text-[#e2e8f0]">{seqs.length} sequences</span>}
+            </div>
+            {scoreChart?<ChartBox config={scoreChart} height={220} summary={scoreSummary}/>:seqs.length>0?noDataPlaceholder('score'):null}
+          </div>);
+        }
+        // alphafold3
+        if(tool.includes('alphafold3')||tool==='af3'||r.cif_files){
+          // Try to build scatter from validated_designs (pipeline context) or single result
+          const vd=r.validated_designs||[];
+          const hasScatter=vd.length>0&&vd.some(d=>d.iptm!=null);
+          const scatterData=vd.filter(d=>d.iptm!=null).map(d=>({
+            x:d.mpnn_score??0,y:d.iptm,
+            bg:d.confidence==='high'?CHART_DARK.ok:d.confidence==='low_confidence'?CHART_DARK.warn:CHART_DARK.bad,
+          }));
+          const scatterChart=hasScatter?{
+            type:'scatter',
+            data:{datasets:[{data:scatterData.map(d=>({x:d.x,y:d.y})),
+              pointBackgroundColor:scatterData.map(d=>d.bg),pointRadius:6,pointHoverRadius:8,borderWidth:0}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'ipTM vs MPNN score',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}},
+              tooltip:{callbacks:{label:ctx=>`ipTM: ${ctx.parsed.y.toFixed(3)} | MPNN: ${ctx.parsed.x.toFixed(3)}`}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'MPNN score',color:CHART_DARK.font}},y:{...chartScaleDefaults,min:0,max:1,title:{display:true,text:'ipTM',color:CHART_DARK.font}}}}
+          }:null;
+          // Radar for single result with iptm/ptm/ranking_score
+          const hasRadar=r.iptm!=null||r.ptm!=null||r.ranking_score!=null;
+          const radarChart=hasRadar?{
+            type:'radar',
+            data:{labels:['ipTM','pTM','Ranking','Confidence'],datasets:[{
+              data:[r.iptm??0,r.ptm??0,r.ranking_score??0,r.fraction_disordered!=null?(1-r.fraction_disordered):0.5],
+              borderColor:CHART_DARK.cyan,backgroundColor:CHART_DARK.cyan+'22',pointBackgroundColor:CHART_DARK.cyan,borderWidth:1.5,pointRadius:3,
+            }]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'Structure quality',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{r:{beginAtZero:true,max:1,ticks:{display:false,stepSize:0.25},grid:{color:CHART_DARK.grid},pointLabels:{color:CHART_DARK.font,font:{size:10,family:'IBM Plex Mono'}}}}}
+          }:null;
+          const af3Summary=[
+            r.iptm!=null&&{label:'ipTM',value:Number(r.iptm).toFixed(3)},
+            r.ptm!=null&&{label:'pTM',value:Number(r.ptm).toFixed(3)},
+            r.cif_files&&{label:'CIF files',value:r.cif_files.length},
+          ].filter(Boolean);
+          return(<div className="space-y-3">
+            <div className="flex items-center gap-4 text-xs font-mono flex-wrap">
+              {r.iptm!=null&&<span><span className="text-[#a0aec0]">ipTM: </span><span className="text-cyan font-semibold">{r.iptm}</span></span>}
+              {r.ptm!=null&&<span><span className="text-[#a0aec0]">pTM: </span><span className="text-[#e2e8f0]">{r.ptm}</span></span>}
+              {r.cif_files?.[0]&&<span>{_path(r.cif_files[0])}</span>}
+              <View3DBtn path={r.cif_files?.[0]||r.structure_path}/>
+            </div>
+            {scatterChart&&<ChartBox config={scatterChart} height={220}/>}
+            {radarChart&&!scatterChart&&<ChartBox config={radarChart} height={220} summary={af3Summary}/>}
+          </div>);
+        }
+        // gnina/autodock/docking
+        if(r.poses?.length){
+          const top=r.poses.slice(0,10);
+          const affinities=top.map(p=>p.affinity_kcal_mol??p.minimizedAffinity??null);
+          const cnnScores=top.map(p=>p.CNNscore??null);
+          const hasCnn=cnnScores.some(v=>v!=null);
+          // Horizontal bar: binding affinity
+          const barChart=affinities.some(v=>v!=null)?{
+            type:'bar',
+            data:{labels:top.map((p,i)=>`Pose ${p.pose_id||i+1}`),datasets:[{
+              data:affinities.map(v=>v!=null?Math.abs(v):0),
+              backgroundColor:affinities.map(v=>{const a=Math.abs(v||0);return a>7?CHART_DARK.ok:a>5?CHART_DARK.warn:CHART_DARK.bad}),
+              borderWidth:0,borderRadius:2,
+            }]},
+            options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'Binding affinity (|kcal/mol|)',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}},
+              tooltip:{callbacks:{label:ctx=>`-${ctx.parsed.x.toFixed(2)} kcal/mol`}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'|Affinity| kcal/mol',color:CHART_DARK.font}},y:{...chartScaleDefaults}}}
+          }:null;
+          // Scatter: affinity vs CNNscore
+          const scatterChart=hasCnn?{
+            type:'scatter',
+            data:{datasets:[{data:top.filter(p=>p.CNNscore!=null&&(p.affinity_kcal_mol??p.minimizedAffinity)!=null).map(p=>({
+              x:p.affinity_kcal_mol??p.minimizedAffinity,y:p.CNNscore})),
+              pointBackgroundColor:CHART_DARK.cyan,pointRadius:5,pointHoverRadius:7,borderWidth:0}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'Affinity vs CNNscore',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}},
+              tooltip:{callbacks:{label:ctx=>`${ctx.parsed.x.toFixed(2)} kcal/mol | CNN: ${ctx.parsed.y.toFixed(3)}`}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'Affinity (kcal/mol)',color:CHART_DARK.font}},y:{...chartScaleDefaults,min:0,max:1,title:{display:true,text:'CNNscore',color:CHART_DARK.font}}}}
+          }:null;
+          const validAff=affinities.filter(v=>v!=null);
+          const dockSummary=validAff.length?[
+            {label:'Best',value:Math.min(...validAff).toFixed(2)+' kcal/mol'},
+            {label:'Mean',value:(validAff.reduce((a,b)=>a+b,0)/validAff.length).toFixed(2)},
+            {label:'Poses',value:r.poses.length},
+          ]:null;
+          return(<div className="space-y-3">
+            {r.output_sdf&&<div className="text-[10px] font-mono"><span className="text-[#a0aec0]">SDF: </span>{_path(r.output_sdf)}</div>}
+            {barChart&&<ChartBox config={barChart} height={Math.max(150,top.length*28)} summary={dockSummary}/>}
+            {scatterChart&&<ChartBox config={scatterChart} height={200}/>}
+          </div>);
+        }
+        // gromacs
+        if(tool.includes('gromacs')||r.output_files?.trajectory){
+          const rmsdData=r.rmsd||r.rmsd_data||[];
+          const energyData=r.energy||r.energy_data||[];
+          const hasRmsd=rmsdData.length>1;
+          const hasEnergy=energyData.length>1;
+          const rmsdChart=hasRmsd?{
+            type:'line',
+            data:{labels:rmsdData.map(d=>d.time??d.t??d[0]),datasets:[
+              {data:rmsdData.map(d=>d.rmsd??d.value??d[1]),borderColor:CHART_DARK.cyan,backgroundColor:CHART_DARK.cyan+'22',fill:true,tension:0.3,borderWidth:1.5,pointRadius:0,label:'RMSD'},
+              {data:rmsdData.map(()=>2),borderColor:CHART_DARK.warn+'88',borderDash:[4,4],borderWidth:1,pointRadius:0,label:'2 Å threshold'},
+            ]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CHART_DARK.font,font:{size:9}},position:'top'},title:{display:true,text:'RMSD vs Time',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'Time (ns)',color:CHART_DARK.font}},y:{...chartScaleDefaults,title:{display:true,text:'RMSD (Å)',color:CHART_DARK.font}}}}
+          }:null;
+          const energyChart=hasEnergy?{
+            type:'line',
+            data:{labels:energyData.map(d=>d.time??d.t??d[0]),datasets:[
+              {data:energyData.map(d=>d.potential??d.energy??d[1]),borderColor:CHART_DARK.purple,borderWidth:1.5,pointRadius:0,tension:0.3,label:'Potential Energy',yAxisID:'y'},
+              ...(energyData[0]?.temperature!=null?[{data:energyData.map(d=>d.temperature),borderColor:CHART_DARK.bad+'aa',borderWidth:1,pointRadius:0,tension:0.3,label:'Temperature',yAxisID:'y1'}]:[]),
+            ]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CHART_DARK.font,font:{size:9}},position:'top'},title:{display:true,text:'Energy / Temperature',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'Time (ns)',color:CHART_DARK.font}},y:{...chartScaleDefaults,position:'left',title:{display:true,text:'Potential (kJ/mol)',color:CHART_DARK.font}},
+                ...(energyData[0]?.temperature!=null?{y1:{...chartScaleDefaults,position:'right',grid:{drawOnChartArea:false},title:{display:true,text:'Temp (K)',color:CHART_DARK.font}}}:{})}}
+          }:null;
+          const traj=r.output_files?.trajectory||r.output_files?.xtc;
+          return(<div className="space-y-3">
+            <div className="flex items-center gap-4 text-xs font-mono flex-wrap">
+              {r.sim_time_ns&&<span><span className="text-[#a0aec0]">Duration: </span><span className="text-[#e2e8f0]">{r.sim_time_ns} ns</span></span>}
+              {traj&&<span>{_path(traj)}</span>}
+            </div>
+            {rmsdChart?<ChartBox config={rmsdChart} height={220}/>:null}
+            {energyChart?<ChartBox config={energyChart} height={220}/>:null}
+            {!hasRmsd&&!hasEnergy&&(<div className="glass rounded-lg p-3 text-xs text-[#a0aec0] font-mono">
+              <p>MD 轨迹文件已生成，可下载后用 gmx rms / gmx energy 分析</p>
+              {r.output_files&&Object.entries(r.output_files).map(([k,v])=><div key={k} className="mt-1">{k}: {_path(v)}</div>)}
+            </div>)}
+          </div>);
+        }
+        // chemprop / ADMET
+        if(r.predictions){
+          const preds=r.predictions;
+          // Build radar: normalize each property to 0-1 for visualization
+          const propKeys=preds[0]?Object.keys(preds[0]).filter(k=>typeof preds[0][k]==='number'):[];
+          const admetLabels={'esol':'Solubility','freesolv':'Hydration','lipophilicity':'Lipophilicity','bbbp':'BBB','tox21':'Toxicity','solubility':'Solubility','logP':'LogP'};
+          const radarChart=propKeys.length>=3&&preds.length<=6?{
+            type:'radar',
+            data:{labels:propKeys.map(k=>admetLabels[k]||k),datasets:preds.map((row,i)=>{
+              const colors=[CHART_DARK.cyan,CHART_DARK.purple,CHART_DARK.ok,CHART_DARK.warn,CHART_DARK.pink,CHART_DARK.blue];
+              const vals=propKeys.map(k=>{const v=row[k];return typeof v==='number'?Math.min(1,Math.max(0,v)):0});
+              return{data:vals,borderColor:colors[i%colors.length],backgroundColor:colors[i%colors.length]+'22',borderWidth:1.5,pointRadius:3,pointBackgroundColor:colors[i%colors.length],label:row.smiles?.slice(0,20)||row.name||`Mol ${i+1}`};
+            })},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CHART_DARK.font,font:{size:9}},position:'top'},title:{display:true,text:'ADMET property radar',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{r:{beginAtZero:true,max:1,ticks:{display:false,stepSize:0.25},grid:{color:CHART_DARK.grid},pointLabels:{color:CHART_DARK.font,font:{size:10,family:'IBM Plex Mono'}}}}}
+          }:null;
+          // Heatmap as stacked bar (approximate)
+          const heatChart=propKeys.length>0&&preds.length>1?{
+            type:'bar',
+            data:{labels:preds.map((row,i)=>row.smiles?.slice(0,12)||row.name||`Mol ${i+1}`),
+              datasets:propKeys.map((k,j)=>{
+                const colors=[CHART_DARK.cyan,CHART_DARK.purple,CHART_DARK.ok,CHART_DARK.warn,CHART_DARK.pink];
+                return{label:admetLabels[k]||k,data:preds.map(row=>typeof row[k]==='number'?row[k]:0),backgroundColor:colors[j%colors.length]+'88',borderWidth:0,borderRadius:2};
+              })},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CHART_DARK.font,font:{size:9}},position:'top'},title:{display:true,text:'ADMET comparison',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{x:{...chartScaleDefaults,stacked:false},y:{...chartScaleDefaults,stacked:false}}}
+          }:null;
+          return(<div className="space-y-3">
+            {radarChart?<ChartBox config={radarChart} height={250}/>:null}
+            {heatChart&&!radarChart?<ChartBox config={heatChart} height={220}/>:null}
+            <table className="w-full text-[10px] font-mono"><thead><tr className="border-b border-border">
+              {propKeys.map(k=><th key={k} className="px-2 py-1 text-left text-[#a0aec0]">{admetLabels[k]||k}</th>)}
+            </tr></thead><tbody>
+              {preds.map((row,i)=><tr key={i} className="border-b border-border/30">
+                {propKeys.map((k,j)=><td key={j} className="px-2 py-1 text-[#e2e8f0]">{typeof row[k]==='number'?row[k].toFixed(4):String(row[k]??'—')}</td>)}
+              </tr>)}
+            </tbody></table>
+          </div>);
+        }
+        // fetch_molecule
+        if(r.smiles&&(tool.includes('fetch_molecule')||r.cid)) return(<div className="flex items-start gap-4">
+          <Mol2D smiles={r.smiles} w={260} h={160}/>
+          <div className="text-xs font-mono space-y-1.5">
+            {r.iupac_name&&<div><span className="text-[#a0aec0]">Name: </span><span className="text-[#e2e8f0]">{r.iupac_name}</span></div>}
+            {r.cid&&<div><span className="text-[#a0aec0]">CID: </span><span className="text-[#e2e8f0]">{r.cid}</span></div>}
+            {r.molecular_weight&&<div><span className="text-[#a0aec0]">MW: </span><span className="text-[#e2e8f0]">{r.molecular_weight}</span></div>}
+            <div><span className="text-[#a0aec0]">SMILES: </span><span className="text-[#e2e8f0] break-all">{r.smiles?.slice(0,60)}</span><CopyBtn text={r.smiles}/></div>
+            {r.sdf_path&&<div><span className="text-[#a0aec0]">SDF: </span>{_path(r.sdf_path)}</div>}
+          </div>
+        </div>);
+        // freesasa
+        if(r.conjugation_sites?.length) return(<div>
+          <h4 className="text-xs text-[#a0aec0] font-mono mb-2">Conjugation Sites ({r.conjugation_sites.length})</h4>
+          <div className="grid grid-cols-3 gap-2">{r.conjugation_sites.map((s,i)=>(
+            <div key={i} className="glass rounded-lg px-3 py-2 text-center">
+              <span className="text-cyan font-mono font-bold text-sm">{s.residue||'—'}</span>
+              <p className="text-[10px] text-[#a0aec0]">{s.sasa?Number(s.sasa).toFixed(1)+' Ų':'—'}</p>
+              {s.type&&<p className="text-[10px] text-purple">{s.type}</p>}
+            </div>
+          ))}</div>
+        </div>);
+        // pipeline — charts + compact summary
+        if(r.steps||r.adc_design){
+          const ps=r.steps||{};const pa=r.adc_design||{};
+          const pAf3=ps.af3_validation||{};const pVd=pAf3.validated_designs||[];
+          const pRfd=ps.rfdiffusion||{};const pMpnn=ps.proteinmpnn||{};
+          const pBest=pVd[0]||{};const pFasta=pMpnn.designs?.[0]?.fasta_file;
+
+          // Funnel chart: design screening
+          const nRfd=pRfd.pdb_files?.length||0;
+          const nMpnn=pMpnn.designs?.reduce?.((a,d)=>(d.sequences?.length||0)+a,0)||pMpnn.designs?.length||0;
+          const nAf3Tested=pAf3.total_tested||0;
+          const nAf3Passed=pAf3.passed||0;
+          const nAdc=pa.adc_smiles?1:0;
+          const funnelSteps=[
+            {label:'RFdiffusion',count:nRfd,color:CHART_DARK.cyan},
+            {label:'ProteinMPNN',count:nMpnn,color:CHART_DARK.purple},
+            {label:'AF3 tested',count:nAf3Tested,color:CHART_DARK.blue},
+            {label:'AF3 passed',count:nAf3Passed,color:CHART_DARK.ok},
+            {label:'ADC built',count:nAdc,color:CHART_DARK.pink},
+          ].filter(s=>s.count>0||s.label==='AF3 passed');
+          const funnelChart=funnelSteps.length>1?{
+            type:'bar',
+            data:{labels:funnelSteps.map(s=>s.label),datasets:[{
+              data:funnelSteps.map(s=>s.count),backgroundColor:funnelSteps.map(s=>s.color),
+              borderWidth:0,borderRadius:4,barPercentage:0.7,
+            }]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'Design screening funnel',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}},
+              tooltip:{callbacks:{label:ctx=>ctx.parsed.y+' designs'}}},
+              scales:{x:{...chartScaleDefaults},y:{...chartScaleDefaults,title:{display:true,text:'Count',color:CHART_DARK.font}}}}
+          }:null;
+
+          // AF3 scatter: ipTM vs MPNN score
+          const af3Scatter=pVd.length>0&&pVd.some(d=>d.iptm!=null)?{
+            type:'scatter',
+            data:{datasets:[{data:pVd.filter(d=>d.iptm!=null).map(d=>({x:d.mpnn_score??0,y:d.iptm})),
+              pointBackgroundColor:pVd.filter(d=>d.iptm!=null).map(d=>d.confidence==='high'?CHART_DARK.ok:d.confidence==='low_confidence'?CHART_DARK.warn:CHART_DARK.bad),
+              pointRadius:7,pointHoverRadius:9,borderWidth:0}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'AF3 ipTM vs MPNN score',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}},
+              tooltip:{callbacks:{label:ctx=>`ipTM: ${ctx.parsed.y.toFixed(3)} | MPNN: ${ctx.parsed.x.toFixed(3)}`}},
+              annotation:{annotations:{threshold:{type:'line',yMin:0.6,yMax:0.6,borderColor:CHART_DARK.warn+'88',borderDash:[4,4],borderWidth:1}}}},
+              scales:{x:{...chartScaleDefaults,title:{display:true,text:'MPNN score',color:CHART_DARK.font}},y:{...chartScaleDefaults,min:0,max:1,title:{display:true,text:'ipTM',color:CHART_DARK.font}}}}
+          }:null;
+
+          // ADC radar
+          const adcRadar=pa.iptm!=null||pa.dar!=null?{
+            type:'radar',
+            data:{labels:['ipTM','DAR/4','Linker stability','Payload potency','MW ratio'],datasets:[{
+              data:[pa.iptm??0,(pa.dar??0)/4,pa.linker?0.8:0,pa.payload?0.9:0,pa.estimated_mw?Math.min(1,150000/(pa.estimated_mw||150000)):0.5],
+              borderColor:CHART_DARK.cyan,backgroundColor:CHART_DARK.cyan+'22',pointBackgroundColor:CHART_DARK.cyan,borderWidth:1.5,pointRadius:3,
+            }]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'ADC properties',color:CHART_DARK.font,font:{size:11,family:'IBM Plex Mono'}}},
+              scales:{r:{beginAtZero:true,max:1,ticks:{display:false,stepSize:0.25},grid:{color:CHART_DARK.grid},pointLabels:{color:CHART_DARK.font,font:{size:10,family:'IBM Plex Mono'}}}}}
+          }:null;
+
+          const dls=[];
+          if(pBest.af3_structure_path) dls.push({label:'Best PDB',path:pBest.af3_structure_path});
+          if(pFasta) dls.push({label:'FASTA',path:pFasta});
+          if(pa.adc_structure_path) dls.push({label:'ADC SDF',path:pa.adc_structure_path});
+          return(<div className="space-y-4">
+            <h4 className="text-xs text-cyan font-mono">{r.job_name||'Binder Design Pipeline'}{r.dry_run===true?' (dry run)':''}</h4>
+            {/* Funnel + AF3 scatter side by side */}
+            <div className="grid grid-cols-2 gap-3">
+              {funnelChart?<div className="glass rounded-lg p-3"><ChartBox config={funnelChart} height={200}/></div>:null}
+              {af3Scatter?<div className="glass rounded-lg p-3"><ChartBox config={af3Scatter} height={200}/></div>:null}
+              {!funnelChart&&!af3Scatter&&<div className="col-span-2 text-xs text-[#94a3b8] font-mono text-center py-6">Pipeline in progress...</div>}
+            </div>
+            {/* AF3 designs compact table */}
+            {pVd.length>0&&(<div className="space-y-1">{pVd.map((d,i)=>(
+              <div key={i} className="glass rounded px-3 py-1.5 flex items-center gap-3 text-[10px] font-mono">
+                <span className="text-cyan w-5">#{d.rank}</span>
+                <span className={`px-1.5 py-0.5 rounded-full ${d.confidence==='high'?'bg-ok/10 text-ok':d.confidence==='low_confidence'?'bg-warn/10 text-warn':'bg-bad/10 text-bad'}`}>{d.confidence||'—'}</span>
+                <span className="text-[#e2e8f0]">ipTM: {d.iptm!=null?d.iptm:'—'}</span>
+                <span className="text-[#a0aec0]">MPNN: {d.mpnn_score!=null?Number(d.mpnn_score).toFixed(3):'—'}</span>
+                {d.af3_structure_path&&<View3DBtn path={d.af3_structure_path}/>}
+              </div>
+            ))}</div>)}
+            {/* ADC radar + summary */}
+            {(pa.nanobody_sequence||adcRadar)&&(<div className="grid grid-cols-2 gap-3">
+              {adcRadar&&<div className="glass rounded-lg p-3"><ChartBox config={adcRadar} height={200}/></div>}
+              <div className="glass rounded-lg p-3">
+                <h4 className="text-[10px] text-[#a0aec0] font-mono mb-2 uppercase">ADC Assembly</h4>
+                <div className="space-y-1.5 text-xs font-mono">
+                  {pa.iptm!=null&&<div><span className="text-[#a0aec0]">ipTM: </span><span className="text-cyan font-semibold">{pa.iptm}</span></div>}
+                  {pa.conjugation_site&&<div><span className="text-[#a0aec0]">Site: </span><span className="text-[#e2e8f0]">{pa.conjugation_site}</span></div>}
+                  {pa.linker&&<div><span className="text-[#a0aec0]">Linker: </span><span className="text-purple">{pa.linker}</span></div>}
+                  {pa.payload&&<div><span className="text-[#a0aec0]">Payload: </span><span className="text-[#e2e8f0]">{pa.payload}</span></div>}
+                  {pa.dar&&<div><span className="text-[#a0aec0]">DAR: </span><span className="text-[#e2e8f0]">{pa.dar}</span></div>}
+                </div>
+                {pa.adc_smiles&&<div className="mt-2"><Mol2D smiles={pa.adc_smiles} w={300} h={120}/></div>}
+              </div>
+            </div>)}
+            {pa.error&&(<div className="glass rounded-lg p-3 border-bad/30 border">
+              <p className="text-xs text-bad font-mono">{pa.error}</p>
+              {pa.partial&&<p className="text-[10px] text-[#a0aec0] mt-1">Pipeline partially completed</p>}
+            </div>)}
+            {dls.length>0&&(<div className="flex flex-wrap gap-2">
+              {dls.map((d,i)=><DlBtn key={i} path={d.path} label={d.label}/>)}
+              <button onClick={()=>{const b=new Blob([JSON.stringify(r,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=`${r.job_name||'pipeline'}_report.json`;a.click();URL.revokeObjectURL(u)}}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono text-cyan border border-cyan/30 rounded hover:bg-cyan/10 transition-all">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 6l3 3 3-3M2 10h8" stroke="currentColor" strokeWidth="1.2"/></svg>Full Report</button>
+            </div>)}
+          </div>);
+        }
+        // fallback: JSON
+        return(<pre className="text-[10px] font-mono text-[#a0aec0] bg-black/20 rounded-lg p-3 overflow-auto max-h-[400px] whitespace-pre-wrap">{JSON.stringify(r,null,2)}</pre>);
+      };
+
+      return(<div className="flex h-full">
+        {/* Left: tool tree */}
+        <div className="w-[180px] flex-shrink-0 border-r border-border overflow-y-auto" style={{background:'rgba(8,12,24,0.4)'}}>
+          <div className="px-3 py-2 border-b border-border">
+            <span className="text-[10px] font-mono text-[#a0aec0] uppercase tracking-wider">Tools ({sortedTools.length})</span>
+          </div>
+          {sortedTools.map(([tool,tks])=>{
+            const hasRunning=tks.some(t=>t.status==='running');
+            const isOpen=hubTool===tool;
+            return(<div key={tool}>
+              <button onClick={()=>setHubTool(isOpen?null:tool)}
+                className={`w-full px-3 py-2 flex items-center gap-2 text-left text-[11px] font-mono transition-all hover:bg-white/[0.03] ${isOpen?'bg-cyan/5 text-cyan':'text-[#a0aec0]'}`}>
+                {hasRunning&&<div className="w-1.5 h-1.5 rounded-full bg-cyan glow-cyan flex-shrink-0"/>}
+                <span className="flex-1 truncate">{TOOL_LABEL[tool]||tool}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5">{tks.length}</span>
+                <span className="text-[9px]">{isOpen?'▾':'▸'}</span>
+              </button>
+              {isOpen&&tks.map(t=>{
+                const s=ST[t.status]||ST.pending;
+                const isSel=activeHubId===t.task_id;
+                return(<button key={t.task_id} onClick={()=>{setHubTask(t.task_id);setSelectedTaskId(t.task_id);setUserLocked(true)}}
+                  className={`w-full px-3 pl-6 py-1.5 flex items-center gap-2 text-[10px] font-mono hover:bg-white/[0.03] transition-all ${isSel?'bg-cyan/8 text-[#e2e8f0]':'text-[#a0aec0]'}`}>
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:s.c}}/>
+                  <span className="truncate flex-1">{t.task_id.slice(0,8)}</span>
+                  <span className="text-[8px] flex-shrink-0" style={{color:s.c}}>{s.label}</span>
+                  {t.status==='running'&&(
+                    <button onClick={e=>{e.stopPropagation();cancelTask(t.task_id)}}
+                      className="w-3 h-3 flex items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 hover:bg-red-500/40 flex-shrink-0"
+                      title="Cancel"><span className="text-[8px] text-[#f87171] leading-none">×</span></button>
+                  )}
+                </button>);
+              })}
+            </div>);
+          })}
+          {sortedTools.length===0&&<p className="text-xs text-[#94a3b8] text-center py-8">No tasks yet</p>}
+        </div>
+        {/* Right: task detail */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* New task toast */}
+          {newTaskToast&&<div className="glass rounded-lg px-3 py-2 mb-3 flex items-center gap-2 float-in border border-cyan/20">
+            <div className="w-2 h-2 rounded-full bg-cyan glow-cyan"/>
+            <span className="text-[11px] text-cyan font-mono">New task started</span>
+            <button onClick={()=>{setSelectedTaskId(newTaskToast);setHubTask(newTaskToast);setNewTaskToast(null)}}
+              className="text-[10px] text-cyan/70 hover:text-cyan font-mono ml-auto">Click to view →</button>
+          </div>}
+          {!selTask?(<div className="flex flex-col items-center justify-center h-full text-[#94a3b8]">
+            <div className="text-3xl mb-3 opacity-30">🗂️</div>
+            <p className="text-xs">Select a task from the left panel or the timeline</p>
+          </div>):(
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-title font-semibold text-[#e2e8f0]">{TOOL_LABEL[selTask.tool]||selTask.tool}</span>
+                <span className="text-[9px] px-2 py-0.5 rounded-full font-mono" style={{color:ST[selTask.status]?.c,background:`${ST[selTask.status]?.c}15`}}>{ST[selTask.status]?.label}</span>
+                <span className="text-[10px] text-[#a0aec0] font-mono">{selTask.task_id.slice(0,12)}</span>
+                <CopyBtn text={selTask.task_id}/>
+                {selTask.started_at&&<span className="text-[10px] text-[#94a3b8] font-mono">{new Date(selTask.started_at).toLocaleTimeString()}</span>}
+                {selTask.status==='running'&&(
+                  <button onClick={()=>cancelTask(selTask.task_id)}
+                    className="ml-auto px-2 py-0.5 text-[10px] font-mono text-[#f87171] border border-red-500/30 rounded hover:bg-red-500/10 transition-all">Cancel</button>
+                )}
+              </div>
+              {selTask.progress_msg&&<p className="text-[11px] text-[#a0aec0] font-mono">{selTask.progress_msg}</p>}
+              {selTask.status==='running'&&<Bar value={selTask.progress||0}/>}
+              {selTask.error&&<div className="glass rounded-lg p-3 border-bad/20 border"><p className="text-xs text-bad font-mono">{selTask.error}</p></div>}
+              {renderResult(selTask,selResult)}
+            </div>
+          )}
+        </div>
+      </div>);
+
+    default: // chat
+      const detectedPipeline=!loading&&chatInput.trim()?detectPipeline(chatInput):null;
+      return(
+        <div className="flex flex-col h-full">
+          {/* Pipeline Preview */}
+          {detectedPipeline&&showPreview&&(
+            <div className="flex-shrink-0 mx-4 mt-3 glass rounded-xl px-4 py-3 float-in">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-mono text-cyan">Detected: {detectedPipeline.name}</span>
+                <button onClick={()=>setShowPreview(false)} className="text-[#a0aec0] hover:text-[#e2e8f0] text-xs">×</button>
+              </div>
+              <div className="pp-flow">
+                {detectedPipeline.steps.map((s,i)=>(
+                  <React.Fragment key={i}>
+                    {i>0&&<span className="pp-arrow">→</span>}
+                    <div className="pp-step">
+                      <span className="text-base">{s.icon}</span>
+                      <span className="text-[#e2e8f0] font-mono whitespace-nowrap">{s.name}</span>
+                      <span className="text-[#a0aec0]">{s.time}</span>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {chat.length===0&&!detectedPipeline&&(
+              <div className="flex flex-col items-center justify-center h-full text-[#94a3b8]">
+                <div className="text-5xl mb-4 opacity-30">🧬</div>
+                <p className="text-sm">Describe your drug design task to begin.</p>
+                <p className="text-xs text-[#94a3b8] mt-1">Qwen3-14B will plan and execute the full pipeline autonomously.</p>
+              </div>
+            )}
+            {chat.map((m,i)=>{
+              if(m.role==='user'){
+                return(
+                  <div key={i} className="flex justify-end float-in">
+                    <div className="max-w-[80%]">
+                      {m.attachLabels&&(
+                        <div className="flex flex-wrap gap-1.5 justify-end mb-1.5">
+                          {m.attachLabels.map((l,j)=><span key={j} className="attach-tag">{l}</span>)}
+                        </div>
+                      )}
+                      <div className="px-4 py-3 rounded-2xl text-sm leading-relaxed bg-cyan/8 border border-cyan/15 text-[#e2e8f0] rounded-br-sm">
+                        {m.content}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              // assistant
+              const ptmInfo=parsePtmCard(m.content||'');
+              return(
+                <div key={i} className="flex justify-start float-in">
+                  <div className="max-w-[80%]">
+                    <div className="glass px-4 py-3 rounded-2xl text-sm leading-relaxed text-[#e2e8f0] rounded-bl-sm">
+                      <div dangerouslySetInnerHTML={{__html:marked.parse(m.content)}} className="prose prose-invert prose-sm max-w-none
+                          [&_code]:bg-white/5 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-cyan [&_code]:text-xs
+                          [&_pre]:bg-black/30 [&_pre]:rounded-lg [&_pre]:p-3
+                          [&_a]:text-cyan [&_a]:no-underline [&_a:hover]:underline
+                          [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm
+                          [&_table]:text-xs [&_th]:text-left [&_td]:px-2 [&_td]:py-1"/>
+                    </div>
+                    {ptmInfo&&(
+                      <div className="ptm-card float-in">
+                        {ptmInfo.map((line,j)=>(
+                          <div key={j} className={line.type==='title'?'ptm-title':line.type==='warn'?'ptm-warn':line.type==='file'?'ptm-file':'ptm-ok'}>
+                            {line.text}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {loading&&(
+              pipelineStarted?(
+                <div className="flex items-center gap-2 pl-2 float-in glass px-4 py-2.5 rounded-2xl rounded-bl-sm max-w-[80%]">
+                  <span className="text-sm">⚡</span>
+                  <span className="text-xs text-cyan font-mono">Pipeline started — track progress in the left panel</span>
+                </div>
+              ):(
+                <div className="flex items-center gap-1.5 pl-2 float-in">
+                  {[0,1,2].map(i=><div key={i} className="w-1.5 h-1.5 rounded-full bg-cyan typing-dot" style={{animationDelay:`${i*0.15}s`}}/>)}
+                  <span className="text-xs text-[#94a3b8] ml-2">Thinking...</span>
+                </div>
+              )
+            )}
+            <div ref={chatEndRef}/>
+          </div>
+          {/* ── Chat input bar ── */}
+          <div className="flex-shrink-0 p-3 border-t border-border glass-strong">
+            {/* attachment tags */}
+            {(attachPdb||attachFasta||attachSmiles)&&(
+              <div className="flex flex-wrap gap-1.5 mb-2 px-1">
+                {attachPdb&&<span className="attach-tag">📄 {attachPdb.filename} <span className="tag-close" onClick={()=>setAttachPdb(null)}>×</span></span>}
+                {attachFasta&&<span className="attach-tag">🧬 序列 {attachFasta.replace(/^>[^\n]*\n/,'').replace(/\s/g,'').length}aa <span className="tag-close" onClick={()=>setAttachFasta(null)}>×</span></span>}
+                {attachSmiles&&<span className="attach-tag">💊 {attachSmiles.length>25?attachSmiles.slice(0,22)+'...':attachSmiles} <span className="tag-close" onClick={()=>setAttachSmiles(null)}>×</span></span>}
+              </div>
+            )}
+            <div className="flex gap-2 items-center">
+              {/* 📎 button */}
+              <div className="relative" ref={attachMenuRef}>
+                <button onClick={()=>setShowAttachMenu(v=>!v)}
+                  className={`p-2.5 rounded-xl border transition-all ${showAttachMenu?'border-cyan/40 text-cyan':'border-border text-[#a0aec0] hover:text-[#e2e8f0] hover:border-[#a0aec0]'}`}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 8l-5.5 5.5a3.5 3.5 0 01-5-5L9 3a2.5 2.5 0 013.5 3.5l-5.5 5a1.5 1.5 0 01-2-2L10.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                </button>
+                {showAttachMenu&&(
+                  <div className="attach-menu glass-strong rounded-xl overflow-hidden">
+                    <button onClick={()=>{pdbInputRef.current?.click()}}>
+                      <span>📂</span><span>上传 PDB / CIF</span>
+                    </button>
+                    <button onClick={()=>{setShowAttachMenu(false);setPasteModal('fasta');setPasteValue(attachFasta||'')}}>
+                      <span>🧬</span><span>粘贴 FASTA 序列</span>
+                    </button>
+                    <button onClick={()=>{setShowAttachMenu(false);setPasteModal('smiles');setPasteValue(attachSmiles||'')}}>
+                      <span>💊</span><span>粘贴 SMILES</span>
+                    </button>
+                  </div>
+                )}
+                <input ref={pdbInputRef} type="file" accept=".pdb,.cif" className="hidden" onChange={handlePdbFile}/>
+              </div>
+              <input ref={chatInputRef} value={chatInput} onChange={e=>setChatInput(e.target.value)}
+                onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}}}
+                placeholder="Describe your task or ask a question..."
+                disabled={loading}
+                className="flex-1 px-4 py-2.5 bg-[#1e2433] border border-border rounded-xl text-sm text-[#e2e8f0]
+                  placeholder-[#6b7280] focus:outline-none focus:border-cyan/40 focus:ring-1 focus:ring-cyan/15
+                  font-mono transition-all disabled:opacity-40"/>
+              <button onClick={sendChat} disabled={loading||!chatInput.trim()}
+                className="px-5 py-2.5 bg-gradient-to-r from-cyan to-purple text-deep font-mono font-bold text-sm rounded-xl
+                  hover:shadow-lg hover:shadow-cyan/20 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
+                {loading?<span className="typing-dot">···</span>:'Run'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  return(
+    <div className="flex flex-col h-screen">
+      {/* ── Top Bar ─────────────────────────────────────────────────────── */}
+      <header className="flex-shrink-0 glass-strong border-b border-border">
+        <div className="max-w-[1800px] mx-auto px-6 py-4 flex items-center gap-6">
+          {/* logo */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="w-3 h-3 rounded-full bg-cyan glow-cyan"/>
+            <span className="text-lg font-title font-bold tracking-tight text-white">OIH</span>
+            <span className="text-xs text-[#a0aec0] font-mono hidden sm:inline">Open Intelligence Hub</span>
+          </div>
+
+          <div className="flex-1"/>
+
+          {/* GPU dot */}
+          <GpuDot health={health}/>
+        </div>
+
+        {/* examples */}
+        <div className="max-w-[1800px] mx-auto px-6 pb-3 flex gap-2 overflow-x-auto">
+          {EXAMPLES.map((ex,i)=>(
+            <button key={i} onClick={()=>{setChatInput(ex.text);chatInputRef.current?.focus()}}
+              className="flex-shrink-0 px-3 py-1 text-[11px] font-mono text-[#a0aec0] glass rounded-full
+                hover:border-cyan/30 hover:text-cyan transition-all">
+              <span className="mr-1">{ex.icon}</span>{ex.text.slice(0,24)}...
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {/* ── Body ────────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left: Timeline */}
+        <aside className="w-[300px] flex-shrink-0 border-r border-border overflow-y-auto" style={{background:'rgba(8,12,24,0.5)'}}>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <span className="text-[10px] font-mono tracking-[0.2em] text-[#a0aec0] uppercase">Agent Pipeline</span>
+            <span className="text-[10px] font-mono text-[#94a3b8]">{tasks.filter(t=>t.status==='running').length} active</span>
+          </div>
+          <div className="p-3">
+            {tasks.length===0
+              ?<p className="text-xs text-[#94a3b8] text-center py-12">Waiting for tasks...</p>
+              :(()=>{
+                // Identify pipeline tasks and group children
+                const PIPELINE_TOOLS=new Set(['binder_design_pipeline','drug_discovery_pipeline']);
+                const pipelines=tasks.filter(t=>PIPELINE_TOOLS.has(t.tool));
+                const childIds=new Set();
+                const pipelineChildren={};
+                for(const pl of pipelines){
+                  const start=new Date(pl.started_at||pl.created_at).getTime();
+                  const end=pl.completed_at?new Date(pl.completed_at).getTime():Date.now();
+                  const children=tasks.filter(t=>{
+                    if(t.task_id===pl.task_id||PIPELINE_TOOLS.has(t.tool))return false;
+                    const ct=new Date(t.created_at).getTime();
+                    return ct>=start-2000&&ct<=end+2000; // 2s tolerance
+                  });
+                  pipelineChildren[pl.task_id]=children;
+                  children.forEach(c=>childIds.add(c.task_id));
+                }
+                // Top-level = pipelines + non-child tasks, sorted newest first
+                const topLevel=tasks.filter(t=>!childIds.has(t.task_id))
+                  .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+                return topLevel.map((t,i)=>{
+                  const children=pipelineChildren[t.task_id];
+                  return(<div key={t.task_id}>
+                    <TimelineNode task={t} isLast={i===topLevel.length-1&&!children?.length}
+                      selected={selectedTaskId===t.task_id}
+                      onSelect={(id)=>{setSelectedTaskId(id);setUserLocked(true);setActiveTab('hub')}}
+                      onCancel={cancelTask}/>
+                    {children?.length>0&&(()=>{
+                      // Group children by tool, show summary
+                      const byTool={};
+                      children.forEach(c=>{const k=c.tool||'unknown';if(!byTool[k])byTool[k]=[];byTool[k].push(c)});
+                      return(<div className="pl-12 pb-3 -mt-2 space-y-1">
+                        {Object.entries(byTool).map(([tool,tks])=>{
+                          const done=tks.filter(t=>t.status==='completed').length;
+                          const running=tks.filter(t=>t.status==='running').length;
+                          const failed=tks.filter(t=>t.status==='failed').length;
+                          return(<div key={tool} className="flex items-center gap-2 text-[10px] font-mono text-[#a0aec0] px-2 py-1 rounded bg-white/[0.02]">
+                            <span className="text-[#e2e8f0]">{TOOL_LABEL[tool]||tool}</span>
+                            <span className="text-[#94a3b8]">×{tks.length}</span>
+                            {done>0&&<span className="text-ok">✓{done}</span>}
+                            {running>0&&<span className="text-cyan">⏳{running}</span>}
+                            {failed>0&&<span className="text-bad">✗{failed}</span>}
+                          </div>);
+                        })}
+                      </div>);
+                    })()}
+                  </div>);
+                });
+              })()
+            }
+          </div>
+        </aside>
+
+        {/* Right: Results */}
+        <section className="flex-1 flex flex-col overflow-hidden">
+          <Tabs items={tabs} active={activeTab} onSelect={setActiveTab} runningTools={runningTools} recentDone={recentDone}/>
+          <div className="flex-1 overflow-y-auto border-t border-border/50 relative">
+            {/* Onboarding banner — shows when pipeline starts and chat tab is active */}
+            {onboardBanner&&activeTab==='chat'&&(
+              <div onClick={()=>setOnboardBanner(false)}
+                className="mx-4 mt-3 px-4 py-3 rounded-xl cursor-pointer transition-all
+                  bg-gradient-to-r from-cyan/10 to-purple/10 border border-cyan/20
+                  hover:border-cyan/40 float-in">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-title font-semibold text-cyan">Pipeline running — explore results as they arrive</span>
+                  <span className="text-[10px] text-[#94a3b8] hover:text-[#e2e8f0]">dismiss</span>
+                </div>
+                <div className="flex flex-wrap gap-3 text-[11px] font-mono text-[#a0aec0]">
+                  <span onClick={e=>{e.stopPropagation();setActiveTab('hub');setOnboardBanner(false)}}
+                    className="hover:text-cyan cursor-pointer">📊 Results Hub — step-by-step progress</span>
+                  <span onClick={e=>{e.stopPropagation();setActiveTab('protein');setOnboardBanner(false)}}
+                    className="hover:text-cyan cursor-pointer">🧬 Protein 3D — visualize structures</span>
+                  <span onClick={e=>{e.stopPropagation();setActiveTab('hub');setOnboardBanner(false)}}
+                    className="hover:text-cyan cursor-pointer">📁 Results Hub — all tool results</span>
+                </div>
+              </div>
+            )}
+            {tabContent()}
+            {/* Persistent 3Dmol container — always mounted, shown/hidden via display */}
+            <Viewer3DPersistent viewer3d={viewer3d} visible={activeTab==='protein'} path={viewerPath||rd.cif||rd.pdb}/>
+          </div>
+        </section>
+      </div>
+
+      {/* ── Paste Modal ──────────────────────────────────────────────────── */}
+      {pasteModal&&(
+        <div className="paste-modal" onClick={e=>{if(e.target===e.currentTarget){setPasteModal(null);setPasteValue('')}}}>
+          <div className="paste-modal-inner">
+            <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-3">
+              {pasteModal==='fasta'?'🧬 粘贴 FASTA 序列':'💊 粘贴 SMILES'}
+            </h3>
+            {pasteModal==='fasta'
+              ?<textarea value={pasteValue} onChange={e=>setPasteValue(e.target.value)}
+                placeholder={">sequence_name\nMKTIIALSYIFCLVFA..."}
+                rows={6}
+                className="w-full px-3 py-2.5 bg-[#1e2433] border border-border rounded-lg text-sm text-[#e2e8f0] placeholder-[#6b7280] font-mono focus:outline-none focus:border-cyan/40 resize-none"/>
+              :<input value={pasteValue} onChange={e=>setPasteValue(e.target.value)}
+                placeholder="CC(=O)Oc1ccccc1C(=O)O"
+                onKeyDown={e=>{if(e.key==='Enter')confirmPaste()}}
+                className="w-full px-3 py-2.5 bg-[#1e2433] border border-border rounded-lg text-sm text-[#e2e8f0] placeholder-[#6b7280] font-mono focus:outline-none focus:border-cyan/40"/>
+            }
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={()=>{setPasteModal(null);setPasteValue('')}}
+                className="px-4 py-1.5 text-xs font-mono text-[#a0aec0] hover:text-[#e2e8f0] transition-all">取消</button>
+              <button onClick={confirmPaste} disabled={!pasteValue.trim()}
+                className="px-4 py-1.5 text-xs font-mono bg-cyan/15 text-cyan border border-cyan/30 rounded-lg hover:bg-cyan/25 disabled:opacity-30 transition-all">确认</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer ──────────────────────────────────────────────────────── */}
+      <footer className="flex-shrink-0 glass-strong border-t border-border px-6 py-2 flex items-center gap-6 text-[10px] font-mono text-[#94a3b8]">
+        <span className="flex items-center gap-2">
+          <span className={`w-1.5 h-1.5 rounded-full ${health?.status==='ok'?'bg-ok':'bg-bad'}`}/>
+          {health?.status==='ok'?'ALL SYSTEMS OPERATIONAL':'CONNECTING...'}
+        </span>
+        {health&&<>
+          <span>CPU Queue: <span className="text-[#a0aec0]">{health.task_queue?.cpu_active||0}/{health.task_queue?.cpu_slots||8}</span></span>
+          <span>GPU Queue: <span className="text-[#a0aec0]">{health.task_queue?.gpu_active||0}/{health.task_queue?.gpu_slots||3}</span></span>
+          {health.task_queue?.pending_total>0&&<span className="text-warn">PENDING: {health.task_queue.pending_total}</span>}
+          <span className="flex-1"/>
+          <span className="text-[#94a3b8]">Containers: {Object.values(health.containers||{}).filter(v=>v==='running').length}/{Object.keys(health.containers||{}).length}</span>
+        </>}
+        <span className="text-[#94a3b8]">192.168.31.23 | Qwen3-14B + 18 Tools</span>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
