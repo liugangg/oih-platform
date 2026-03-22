@@ -2,7 +2,7 @@
 Three-Queue Task Manager
 ========================
 - CPU queue:      Semaphore(8)  — fpocket, P2Rank, Chemprop
-- GPU queue:      Semaphore(3)  — GNINA, AutoDock, DiffDock, AF3, RFdiffusion,
+- GPU queue:      Semaphore(1)  — GNINA, AutoDock, DiffDock, AF3, RFdiffusion,
                                   ProteinMPNN, BindCraft, GROMACS, ESM
 - Degraded queue: Semaphore(4)  — auto-fallback when GPU1 VRAM is insufficient
 
@@ -133,7 +133,7 @@ class TaskManager:
 
     Semaphore limits:
       CPU      → 8  concurrent  (lightweight: fpocket, P2Rank, Chemprop)
-      GPU      → 3  concurrent  (heavy GPU compute)
+      GPU      → 1  concurrent  (one at a time — RTX 4090 44GB, AF3 alone needs 20GB)
       Degraded → 4  concurrent  (CPU+RAM fallback when VRAM insufficient)
     """
 
@@ -142,7 +142,7 @@ class TaskManager:
 
         # Semaphores (safe to create outside async context in Python 3.10+)
         self._cpu_sem      = asyncio.Semaphore(8)
-        self._gpu_sem      = asyncio.Semaphore(3)
+        self._gpu_sem      = asyncio.Semaphore(1)   # RTX 4090 44GB — one GPU task at a time to prevent OOM
         self._degraded_sem = asyncio.Semaphore(4)
 
         # Live active-slot counters (incremented inside semaphore, decremented on exit)
