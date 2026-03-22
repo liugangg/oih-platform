@@ -9,7 +9,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
-<script src="https://unpkg.com/@rdkit/rdkit@2024.3.3/dist/RDKit_minimal.js"></script>
+<script src="https://unpkg.com/@rdkit/rdkit/Code/MinimalLib/dist/RDKit_minimal.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -511,7 +511,16 @@ const chartScaleDefaults={
 /* ── RDKit 2D mol ─────────────────────────────────────────────────────────── */
 let _rdkReady=null;
 function ensureRDKit(){
-  if(!_rdkReady) _rdkReady=window.initRDKitModule().then(m=>{window.RDKitModule=m;return m});
+  if(_rdkReady) return _rdkReady;
+  if(typeof window.initRDKitModule!=='function'){
+    console.warn('RDKit not available (CDN may have failed), skipping 2D render');
+    return Promise.resolve(null);
+  }
+  _rdkReady=window.initRDKitModule().then(m=>{window.RDKitModule=m;return m}).catch(e=>{
+    console.warn('RDKit init failed:',e);
+    _rdkReady=null;
+    return null;
+  });
   return _rdkReady;
 }
 function Mol2D({smiles,w=280,h=180,label}){
@@ -519,8 +528,13 @@ function Mol2D({smiles,w=280,h=180,label}){
   useEffect(()=>{
     if(!smiles||!ref.current)return;
     ensureRDKit().then(RDKit=>{
+      if(!RDKit||!ref.current){
+        if(ref.current) ref.current.innerHTML=`<code style="color:#a0aec0;font-size:10px;word-break:break-all;max-width:${w}px;display:block">${smiles.slice(0,80)}${smiles.length>80?'...':''}</code>`;
+        return;
+      }
       try{
         const mol=RDKit.get_mol(smiles);
+        if(!mol){if(ref.current)ref.current.innerHTML=`<code style="color:#a0aec0;font-size:10px;word-break:break-all">${smiles.slice(0,80)}...</code>`;return;}
         const svg=mol.get_svg_with_highlights(JSON.stringify({
           width:w,height:h,
           backgroundColour:[10/255,14/255,26/255,1],
@@ -530,7 +544,7 @@ function Mol2D({smiles,w=280,h=180,label}){
         ref.current.innerHTML=svg;
         mol.delete();
       }catch(e){
-        ref.current.innerHTML=`<div style="padding:12px;color:#94a3b8;font-size:11px;font-family:IBM Plex Mono;word-break:break-all;max-width:${w}px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px dashed rgba(255,255,255,0.1)"><span style="color:#a0aec0;font-size:10px">SMILES (2D render failed):</span><br/>${smiles.slice(0,120)}${smiles.length>120?'...':''}</div>`;
+        if(ref.current) ref.current.innerHTML=`<code style="color:#a0aec0;font-size:10px;word-break:break-all;max-width:${w}px;display:block">${smiles.slice(0,120)}${smiles.length>120?'...':''}</code>`;
       }
     });
   },[smiles,w,h]);
