@@ -986,6 +986,32 @@ ALL_TOOLS = [
         }
     },
 
+    # ─── Report Generation ─────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_report",
+            "description": (
+                "Generate a comprehensive English research report for a drug discovery project. "
+                "Collects all experiment results (AF3 ipTM, ADC SMILES, FreeSASA sites, MPNN sequences), "
+                "queries RAG for latest literature, and uses Qwen to write a professional analysis report. "
+                "Returns markdown report + structured data. Use when user says 'generate report', "
+                "'write summary', 'export results', or after completing a full binder/ADC pipeline."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_name": {"type": "string", "default": "HER2", "description": "Target protein name"},
+                    "job_prefix": {"type": "string", "description": "Job name prefix to filter results, e.g. 'her2_tier1_v2'"},
+                    "include_rag": {"type": "boolean", "default": true, "description": "Include RAG literature search"},
+                },
+                "required": ["job_prefix"],
+            },
+            "_endpoint": f"{API_BASE}/report/generate",
+            "_method": "POST",
+        }
+    },
+
     # ─── System Status ─────────────────────────────────────────────────────────
     {
         "type": "function",
@@ -1080,6 +1106,7 @@ QWEN_SYSTEM_PROMPT = """你是OIH生物计算平台的AI助手，运行在OIH服
 
 **数据分析**
 - execute_python: 执行Python代码（matplotlib/pandas/numpy/scipy），生成图表保存到/data/oih/outputs/plots/
+- generate_report: 生成英文研究报告（收集实验数据+RAG文献+Qwen分析），返回Markdown+PDF。用户说"生成报告/导出结果/write report"时调用。
 - read_results_file: 读取CSV/JSON/TXT结果文件，查看工具输出内容
 
 **任务管理**
