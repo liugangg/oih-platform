@@ -1065,17 +1065,57 @@ function App(){
       </div>);
 
     case 'sites':
-      return(<div className="p-4">
-        <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-4">Conjugation Sites (SASA &gt; 40 A&sup2;)</h3>
+      const allSites=rd.sites||[];
+      const chainASites=allSites.filter(s=>(s.chain||'')==='A');
+      const lysSites=chainASites.filter(s=>(s.residue||'').startsWith('K')).sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0));
+      const cysSites=chainASites.filter(s=>(s.residue||'').startsWith('C')).sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0));
+      const bestSite=lysSites[0]||cysSites[0]||allSites[0];
+      return(<div className="p-4 space-y-4">
+        <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-2">Conjugation Sites</h3>
+        {/* SASA bar chart for chain A */}
+        {chainASites.length>0&&(
+          <div className="glass rounded-xl p-4">
+            <p className="text-xs text-[#a0aec0] mb-2 font-mono">Chain A SASA ({chainASites.length} residues)</p>
+            <div style={{display:'flex',alignItems:'flex-end',gap:1,height:120,overflowX:'auto',paddingBottom:4}}>
+              {chainASites.sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0)).slice(0,30).map((s,i)=>{
+                const sasa=Number(s.sasa||0);
+                const maxSasa=Number(chainASites[0]?.sasa||100);
+                const h=Math.max(4,sasa/maxSasa*100);
+                const isBest=bestSite&&s.residue===bestSite.residue;
+                const isLys=(s.residue||'').startsWith('K');
+                const color=isBest?'#FF4444':isLys?'#FF8C00':'#00DDDD';
+                return(<div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',minWidth:20}}>
+                  <div style={{width:14,height:h,backgroundColor:color,borderRadius:'2px 2px 0 0',opacity:0.8}}/>
+                  <span style={{fontSize:7,color:isBest?'#FF4444':'#94a3b8',marginTop:2,transform:'rotate(-45deg)',transformOrigin:'top left',whiteSpace:'nowrap'}}>{s.residue}</span>
+                </div>);
+              })}
+            </div>
+            <div style={{display:'flex',gap:12,marginTop:8,fontSize:10,color:'#94a3b8'}}>
+              <span><span style={{color:'#FF4444'}}>■</span> Best site</span>
+              <span><span style={{color:'#FF8C00'}}>■</span> Lys</span>
+              <span><span style={{color:'#00DDDD'}}>■</span> Other</span>
+            </div>
+          </div>
+        )}
+        {/* Top sites grid */}
         <div className="grid grid-cols-4 gap-2">
-          {(rd.sites||[]).map((s,i)=>(
-            <div key={i} className="glass rounded-lg px-3 py-2 text-center">
-              <span className="text-cyan font-mono font-bold text-sm">{s.residue||s}</span>
+          {(lysSites.length?lysSites:allSites).slice(0,8).map((s,i)=>(
+            <div key={i} className={`glass rounded-lg px-3 py-2 text-center ${i===0?'ring-1 ring-cyan/40':''}`}>
+              <span className={`font-mono font-bold text-sm ${i===0?'text-cyan':'text-[#e2e8f0]'}`}>{s.residue||s}</span>
               {s.sasa&&<p className="text-[10px] text-[#a0aec0] mt-0.5">{Number(s.sasa).toFixed(1)} A&sup2;</p>}
-              {s.type&&<p className="text-[10px] text-purple mt-0.5">{s.type}</p>}
+              {i===0&&<p className="text-[10px] text-cyan mt-0.5 font-bold">Best</p>}
             </div>
           ))}
         </div>
+        {/* Recommendation */}
+        {bestSite&&(
+          <div className="glass rounded-xl p-3 border border-cyan/20">
+            <p className="text-xs text-cyan font-mono font-bold">Recommended: {bestSite.residue} (SASA={Number(bestSite.sasa||0).toFixed(1)} A&sup2;)</p>
+            <p className="text-[10px] text-[#a0aec0] mt-1">
+              {(bestSite.residue||'').startsWith('K')?'Lys → NHS-amine conjugation (no Cys engineering needed)':'Cys → Maleimide-thiol conjugation'}
+            </p>
+          </div>
+        )}
       </div>);
 
     case 'linker':
@@ -1111,37 +1151,74 @@ function App(){
       </div>);
 
     case 'adc':
-      return(<div className="p-6">
-        <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-5">ADC Assembly</h3>
-        {/* three-part connected view */}
+      const adcIptm=rd.iptm||rd.pipeline?.adc_design?.iptm;
+      const adcSite=rd.conjugation_site||rd.sites?.[0]?.residue||rd.pipeline?.adc_design?.conjugation_site;
+      const adcSasa=rd.sites?.[0]?.sasa;
+      const adcLinker=rd.linker_name||rd.pipeline?.adc_design?.linker||'NHS-PEG4';
+      const adcDar=rd.dar||rd.pipeline?.adc_design?.dar||4;
+      const adcEmbed=rd.embedding_status||'3d';
+      const adcSeq=rd.nanobody_sequence||rd.pipeline?.adc_design?.nanobody_sequence;
+      return(<div className="p-6 space-y-5">
+        <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">ADC Assembly</h3>
+        {/* Summary card */}
+        <div className="glass rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-[10px] text-[#a0aec0] font-mono">ipTM</p>
+            <p className={`text-lg font-bold font-mono ${adcIptm>=0.6?'text-ok':'text-warn'}`}>{adcIptm?Number(adcIptm).toFixed(2):'—'}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-[#a0aec0] font-mono">Conjugation Site</p>
+            <p className="text-lg font-bold text-cyan font-mono">{adcSite||'—'}</p>
+            {adcSasa&&<p className="text-[10px] text-[#94a3b8]">SASA: {Number(adcSasa).toFixed(1)} A&sup2;</p>}
+          </div>
+          <div>
+            <p className="text-[10px] text-[#a0aec0] font-mono">Linker</p>
+            <p className="text-sm font-bold text-purple font-mono">{adcLinker}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-[#a0aec0] font-mono">DAR</p>
+            <p className="text-lg font-bold text-[#e2e8f0] font-mono">{adcDar}</p>
+            <p className="text-[10px] text-[#94a3b8]">{adcEmbed==='3d'?'3D structure':'2D SMILES only'}</p>
+          </div>
+        </div>
+        {/* Binder sequence */}
+        {adcSeq&&(
+          <div className="glass rounded-xl p-3">
+            <p className="text-[10px] text-[#a0aec0] mb-1 font-mono">Binder Sequence ({adcSeq.length}aa)</p>
+            <p className="text-[10px] text-cyan font-mono break-all leading-relaxed">{adcSeq}</p>
+          </div>
+        )}
+        {/* Three-part connected view */}
         <div className="flex items-center gap-3 overflow-x-auto pb-4">
-          {/* antibody/site */}
           <div className="glass rounded-xl p-4 text-center min-w-[160px]">
             <div className="text-4xl mb-2">🧬</div>
-            <p className="text-xs text-cyan font-mono">Antibody</p>
-            {rd.sites?.[0]&&<p className="text-[10px] text-[#a0aec0] mt-1">Site: {rd.sites[0].residue||rd.sites[0]}</p>}
+            <p className="text-xs text-cyan font-mono">Binder</p>
+            {adcSite&&<p className="text-[10px] text-[#a0aec0] mt-1">Site: <span className="text-cyan font-bold">{adcSite}</span></p>}
           </div>
-          <div className="text-[#94a3b8] text-xl">—</div>
-          {/* linker */}
+          <div className="text-[#94a3b8] text-xl font-mono">—NHS—</div>
           <div className="glass rounded-xl p-4 text-center min-w-[200px]">
             {rd.linker_smiles
               ?<Mol2D smiles={rd.linker_smiles} w={180} h={100}/>
               :<div className="text-3xl mb-2">🔗</div>}
-            <p className="text-xs text-purple font-mono mt-1">Linker</p>
+            <p className="text-xs text-purple font-mono mt-1">{adcLinker}</p>
           </div>
-          <div className="text-[#94a3b8] text-xl">—</div>
-          {/* payload */}
+          <div className="text-[#94a3b8] text-xl font-mono">—</div>
           <div className="glass rounded-xl p-4 text-center min-w-[200px]">
             {rd.payload_smiles
               ?<Mol2D smiles={rd.payload_smiles} w={180} h={100}/>
               :<div className="text-3xl mb-2">💣</div>}
-            <p className="text-xs text-bad font-mono mt-1">Payload</p>
+            <p className="text-xs text-bad font-mono mt-1">MMAE</p>
           </div>
         </div>
-        {/* full conjugate */}
+        {/* Full conjugate */}
         {rd.adc_smiles&&(
-          <div className="mt-6 glass rounded-xl p-5">
-            <p className="text-xs text-[#a0aec0] mb-3">Full Conjugate SMILES</p>
+          <div className="glass rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <p className="text-xs text-[#a0aec0]">Full Conjugate</p>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${adcEmbed==='3d'?'bg-ok/10 text-ok':'bg-warn/10 text-warn'}`}>
+                {adcEmbed==='3d'?'3D structure':'2D only'}
+              </span>
+            </div>
             <Mol2D smiles={rd.adc_smiles} w={500} h={220} label="ADC Conjugate"/>
             <p className="text-[10px] text-[#94a3b8] font-mono mt-2 break-all max-w-2xl">{rd.adc_smiles}</p>
           </div>
