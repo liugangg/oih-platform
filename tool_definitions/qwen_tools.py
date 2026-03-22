@@ -1142,6 +1142,7 @@ QWEN_SYSTEM_PROMPT = """你是OIH生物计算平台的AI助手，运行在OIH服
 - data 验证 + addModel try/catch + 友好错误提示
 - **Bug 3 — RAG 残基编号匹配失败**：
 - DT3 阈值：**adaptive = max(top 20% score, 0.10)**，不要用固定 0.7
+- pipeline 必须指定 `chains="A"` 过滤，否则 DiscoTope3 报 "No valid PDB"
 
 ## ADC 注意事项
 - Step 3: AF3 验证 — top5 MPNN → AF3 复合物 → ipTM 分级（≥0.75 high / ≥0.6 low_confidence）

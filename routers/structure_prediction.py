@@ -98,13 +98,33 @@ async def predict_alphafold3(req: AlphaFold3Request):
         ]
         # run_relaxation not supported in this AF3 version
 
+        # Dynamic timeout based on total sequence length
+        total_len = sum(
+            len(c.sequence or '') for c in req.chains if c.type in ('protein', 'rna', 'dna')
+        )
+        if total_len > 1000:
+            af3_timeout = 3600
+        elif total_len > 500:
+            af3_timeout = 2400
+        else:
+            af3_timeout = 1200
+
+        import logging as _log
+        _log.getLogger("oih").info(
+            "[AF3] %s: total_len=%d → timeout=%ds", req.job_name, total_len, af3_timeout)
+
         retcode, output = await run_in_container_streaming(
             settings.CONTAINER_ALPHAFOLD3, cmd, task,
-            timeout=settings.TIMEOUT_ALPHAFOLD3
+            timeout=af3_timeout
         )
 
         if retcode != 0:
-            raise RuntimeError(f"AlphaFold3 failed (exit {retcode})")
+            # Capture last 20 lines of output for error diagnosis
+            output_lines = (output or "").strip().splitlines()
+            tail = "\n".join(output_lines[-20:]) if output_lines else "(no output)"
+            raise RuntimeError(
+                f"AlphaFold3 failed (exit {retcode})\n--- last 20 lines ---\n{tail}"
+            )
 
         # Collect output PDB files
         cif_files = [str(p) for p in Path(output_dir).glob("**/*.cif")]
