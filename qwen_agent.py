@@ -66,6 +66,7 @@ class OIHToolExecutor:
         "discotope3_predict":      ("POST", f"{OIH_API_BASE}/immunology/discotope3"),
         "igfold_predict":          ("POST", f"{OIH_API_BASE}/immunology/igfold"),
         "extract_interface_residues": ("POST", f"{OIH_API_BASE}/structure/extract_interface"),
+        "generate_report":         ("POST", f"{OIH_API_BASE}/report/generate"),
     }
 
     async def execute(self, function_name: str, arguments: Dict[str, Any]) -> Dict:
