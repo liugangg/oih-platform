@@ -1043,14 +1043,22 @@ function App(){
             if(r.predictions)d.predictions=r.predictions;
             if(r.conjugation_sites){
               d.sites=r.conjugation_sites;
-              /* Collect per-design FreeSASA results */
               if(!d.sites_by_design)d.sites_by_design=[];
-              const sJn=t.input?.job_name||r.output_dir?.match(/outputs\/([^/]+)/)?.[1]||'';
-              const sVm=sJn.match(/val[_]?(\d+)/);
+              /* Find top chain-A Lys site */
+              const caSites=(r.conjugation_sites||[]).filter(s=>(s.chain||'')==='A'&&(s.residue||'').startsWith('K'));
+              caSites.sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0));
+              const topLys=caSites[0]?.residue||'?';
+              const topSasa=caSites[0]?Number(caSites[0].sasa).toFixed(1):'?';
+              /* Assign val number by order (FreeSASA tasks submitted in val_0,1,2 order) */
+              const idx=d.sites_by_design.length;
+              /* Known mapping: first=val_0(K107), second=val_1(K188), third=val_2(K188) */
+              const valLabels=['val_0','val_1','val_2'];
               d.sites_by_design.push({
-                designLabel:sVm?`val_${sVm[1]}`:sJn,
-                valNum:sVm?sVm[1]:null,
+                designLabel:valLabels[idx]||`design_${idx}`,
+                valNum:String(idx),
                 sites:r.conjugation_sites,
+                topLys:topLys,
+                topSasa:topSasa,
               });
             }
             if(r.selected_linkers)d.linkers=r.selected_linkers;
@@ -1316,12 +1324,10 @@ function App(){
         {designs.length>1&&(
           <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
             {designs.map((ds,di)=>{
-              const best=ds.valNum?knownBest[ds.valNum]:'?';
-              const sasa=ds.valNum?knownSasa[ds.valNum]:null;
               const active=di===sitesIdx;
               return(<button key={di} onClick={()=>setSitesIdx(di)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all cursor-pointer ${active?'bg-cyan/20 text-cyan border border-cyan/40':'text-white/60 hover:text-white hover:bg-white/10 border border-transparent'}`}>
-                {ds.designLabel}: {best}{sasa?` (${sasa.toFixed(0)}A\u00B2)`:''}
+                {ds.designLabel}: {ds.topLys||'?'} ({ds.topSasa||'?'}A{'\u00B2'})
               </button>);
             })}
           </div>
