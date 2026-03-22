@@ -152,11 +152,12 @@ const PIPELINE_PATTERNS=[
     {icon:'📍',name:'FreeSASA ADC',time:'~1min'},{icon:'🔗',name:'Linker',time:'~1min'},
     {icon:'💊',name:'MMAE',time:'~1min'},{icon:'⚗️',name:'ADC DAR=4',time:'~2min'},
   ]},
-  {re:/ADC|抗体|nanobody|binder/i,name:'Binder Design + ADC Pipeline',steps:[
-    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🧬',name:'RFdiffusion',time:'~20min'},
-    {icon:'🔤',name:'ProteinMPNN',time:'~5min'},{icon:'🔬',name:'AlphaFold3',time:'~15min'},
-    {icon:'📍',name:'FreeSASA',time:'~1min'},{icon:'🔗',name:'Linker Select',time:'~1min'},
-    {icon:'💊',name:'Fetch Payload',time:'~1min'},{icon:'⚗️',name:'ADC Conjugate',time:'~2min'},
+  {re:/ADC|抗体|nanobody|binder|adc/i,name:'Binder Design + ADC (Tier-aware)',steps:[
+    {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🔍',name:'Tier Classify',time:'~5s'},
+    {icon:'🎯',name:'Interface Extract',time:'~5s'},{icon:'🧬',name:'RFdiffusion',time:'~20min'},
+    {icon:'🔤',name:'ProteinMPNN',time:'~5min'},{icon:'📊',name:'ESM2 Filter',time:'~5min'},
+    {icon:'🔬',name:'AlphaFold3',time:'~15min'},{icon:'📍',name:'FreeSASA',time:'~1min'},
+    {icon:'🔗',name:'NHS-PEG4',time:'~1min'},{icon:'⚗️',name:'ADC DAR=4',time:'~2min'},
   ]},
   {re:/drug discovery|药物发现/i,name:'Drug Discovery Pipeline',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🕳️',name:'fpocket',time:'~2min'},
