@@ -796,7 +796,7 @@ function ExportReportModal({show,onClose}){
             className="px-4 py-2 text-xs font-mono rounded-lg bg-cyan/10 text-cyan hover:bg-cyan/20 transition-all">
             Copy Markdown
           </button>}
-          {reportMd&&<button onClick={()=>_downloadRawData()}
+          {reportMd&&<button onClick={()=>window.open(`${API}/api/v1/report/download_raw?target=HER2`,'_blank')}
             className="px-4 py-2 text-xs font-mono rounded-lg bg-purple/10 text-purple hover:bg-purple/20 transition-all">
             Download Raw Data (.zip)
           </button>}
