@@ -1,0 +1,243 @@
+services:
+
+  oih-alphafold3:
+    image: alphafold3:latest
+    container_name: oih-alphafold3
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /data/af3:/data/af3
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+      - /data/alphafold3_models:/data/alphafold3_models:ro
+      - /data/alphafold3_db:/data/alphafold3_db:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-rfdiffusion:
+    image: rfdiffusion:latest
+    container_name: oih-rfdiffusion
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+      - /data/rfdiffusion/models:/data/models/rfdiffusion:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-proteinmpnn:
+    image: proteinmpnn:latest
+    container_name: oih-proteinmpnn
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-bindcraft:
+    image: bindcraft:latest
+    container_name: oih-bindcraft
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-fpocket:
+    image: fpocket:latest
+    container_name: oih-fpocket
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-p2rank:
+    image: p2rank:latest
+    container_name: oih-p2rank
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-vina-gpu:
+    image: vina-gpu:latest
+    container_name: oih-vina-gpu
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+      - /etc/OpenCL:/etc/OpenCL:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-autodock-gpu:
+    image: autodock-gpu:latest
+    container_name: oih-autodock-gpu
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-gnina:
+    image: gnina:latest
+    container_name: oih-gnina
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-diffdock:
+    image: diffdock:latest
+    container_name: oih-diffdock
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+      - /data/diffdock/workdir:/app/DiffDock/workdir
+      - /data/diffdock/esm_cache:/root/.cache
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-gromacs:
+    image: gromacs:latest
+    container_name: oih-gromacs
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+      - GMX_GPU_DD_COMMS=true
+      - GMX_GPU_PME_PP_COMMS=true
+      - GMX_FORCE_UPDATE_DEFAULT_GPU=true
+    volumes:
+      - /data/oih:/data/oih
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+
+  oih-esm:
+    image: esm:latest
+    container_name: oih-esm
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /data/oih/model_cache/esm_torch_hub:/root/.cache/torch/hub
+      - /usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:ro
+      - /data/proteinmpnn/LigandMPNN:/data/proteinmpnn/LigandMPNN:ro
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-chemprop:
+    image: chemprop:latest
+    container_name: oih-chemprop
+    volumes:
+      - /data/oih:/data/oih
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    command: []
+    restart: unless-stopped
+
+  oih-discotope3:
+    image: discotope3:latest
+    container_name: oih-discotope3
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /data/oih/model_cache/torch/hub:/root/.cache/torch/hub
+      - /data/oih/model_cache/discotope3_models:/app/discotope3/models
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    restart: unless-stopped
+
+  oih-igfold:
+    image: oih-igfold:latest
+    container_name: oih-igfold
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+    volumes:
+      - /data/oih:/data/oih
+      - /data/oih/model_cache/igfold:/root/.cache
+    networks:
+      - oih-net
+    entrypoint: ["sleep", "infinity"]
+    restart: unless-stopped
+
+networks:
+  oih-net:
+    driver: bridge
