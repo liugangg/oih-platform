@@ -212,14 +212,20 @@ def main():
 
     if args.metadata_only:
         print(f"\n--- Generating metadata.json for {len(dirs)} directories ---")
+        written = 0
+        skipped = 0
         for dirname in dirs:
             dirpath = os.path.join(OUTPUTS_DIR, dirname)
             cat = classify_directory(dirname)
             metadata = create_metadata(dirpath, dirname, cat)
             meta_path = os.path.join(dirpath, "metadata.json")
-            with open(meta_path, "w") as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-        print("Done.")
+            try:
+                with open(meta_path, "w") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                written += 1
+            except PermissionError:
+                skipped += 1
+        print(f"Done. {written} written, {skipped} skipped (permission denied).")
         return
 
     if not args.apply and not args.archive_test:
