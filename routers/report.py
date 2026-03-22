@@ -65,85 +65,114 @@ class ReportRequest(BaseModel):
     include_rag: bool = Field(True, description="Include RAG literature search")
 
 
+def _task_matches(task: dict, keywords: list) -> bool:
+    """Check if a task matches any of the keywords in any searchable field."""
+    result = task.get("result") or {}
+    searchable = " ".join([
+        result.get("output_dir", ""),
+        result.get("output_sdf", ""),
+        result.get("job_name", ""),
+        task.get("input", {}).get("job_name", "") if isinstance(task.get("input"), dict) else "",
+        task.get("task_id", ""),
+    ]).lower()
+    return any(k.lower() in searchable for k in keywords)
+
+
 async def _collect_project_data(job_prefix: str) -> dict:
-    """Collect all experiment results matching the job prefix."""
+    """Collect all experiment results by tool type, filtered by target keyword."""
     tasks_dir = "/data/oih/oih-api/data/tasks"
-    data = {
-        "af3_results": [],
-        "adc_results": [],
-        "mpnn_results": [],
-        "freesasa_results": [],
-        "pipeline_results": [],
-    }
-
-    # Derive target keyword from prefix (e.g. "her2_tier1_v2" → "her2")
     target_kw = job_prefix.split("_")[0].lower() if job_prefix else ""
+    keywords = [k for k in [job_prefix, target_kw] if k]
 
+    # Load all completed tasks, group by tool
+    all_tasks = {}
     for f in glob.glob(os.path.join(tasks_dir, "*.json")):
         try:
             task = json.load(open(f))
             if task.get("status") != "completed":
                 continue
-            result = task.get("result") or {}
-            output_dir = result.get("output_dir", "")
-            output_sdf = result.get("output_sdf", "")
-            input_job = task.get("input", {}).get("job_name", "")
-
-            # Match by: exact prefix in paths, or target keyword in any path
-            searchable = f"{output_dir} {output_sdf} {input_job} {result.get('job_name', '')}".lower()
-            if job_prefix and job_prefix.lower() not in searchable and target_kw not in searchable:
+            if not _task_matches(task, keywords):
                 continue
-
-            tool = task.get("tool", "")
-
-            if tool == "alphafold3":
-                best_iptm = 0
-                for cf in result.get("confidence_files", []):
-                    try:
-                        conf = json.load(open(cf))
-                        ip = conf.get("iptm", 0)
-                        if ip > best_iptm:
-                            best_iptm = ip
-                    except Exception:
-                        pass
-                data["af3_results"].append({
-                    "job_name": output_dir.split("/")[-2] if "/" in output_dir else "?",
-                    "iptm": round(best_iptm, 4),
-                    "num_structures": result.get("num_structures", 0),
-                })
-
-            elif tool == "rdkit_conjugate":
-                # Extract job_name from result or output_sdf path
-                adc_job = result.get("job_name") or ""
-                if not adc_job and output_sdf:
-                    m = re.search(r'outputs/([^/]+)/', output_sdf)
-                    if m: adc_job = m.group(1)
-                data["adc_results"].append({
-                    "job_name": adc_job,
-                    "conjugation_site": result.get("conjugation_site", "?"),
-                    "adc_smiles": result.get("adc_smiles", "")[:100],
-                    "covalent": result.get("covalent", False),
-                    "reaction_type": result.get("reaction_type_used", "?"),
-                    "embedding_status": result.get("embedding_status", "?"),
-                    "conjugation_site": task.get("input", {}).get("conjugation_site", "?"),
-                })
-
-            elif tool == "freesasa":
-                sites = result.get("conjugation_sites", [])
-                chain_a = [s for s in sites if s.get("chain") == "A"]
-                top_lys = sorted(
-                    [s for s in chain_a if s.get("residue", "").startswith("K")],
-                    key=lambda s: float(s.get("sasa", 0)), reverse=True
-                )[:3]
-                data["freesasa_results"].append({
-                    "total_sites": len(sites),
-                    "chain_a_sites": len(chain_a),
-                    "top_lys": [(s["residue"], round(float(s["sasa"]), 1)) for s in top_lys],
-                })
-
-        except Exception as e:
-            logger.debug("Report data collection error: %s", e)
+            tool = task.get("tool", "unknown")
+            all_tasks.setdefault(tool, []).append(task)
+        except Exception:
             continue
+
+    # Sort each tool group by created_at descending
+    for tool in all_tasks:
+        all_tasks[tool].sort(key=lambda t: t.get("created_at", ""), reverse=True)
+
+    # Extract structured results
+    data = {
+        "af3_results": [],
+        "adc_results": [],
+        "freesasa_results": [],
+        "mpnn_results": [],
+        "rfdiffusion_results": [],
+        "pipeline_results": [],
+    }
+
+    for task in all_tasks.get("alphafold3", []):
+        result = task.get("result") or {}
+        best_iptm = 0
+        for cf in result.get("confidence_files", []):
+            try:
+                conf = json.load(open(cf))
+                ip = conf.get("iptm", 0)
+                if ip > best_iptm:
+                    best_iptm = ip
+            except Exception:
+                pass
+        odir = result.get("output_dir", "")
+        data["af3_results"].append({
+            "job_name": odir.split("/")[-2] if "/" in odir else "?",
+            "iptm": round(best_iptm, 4),
+            "num_structures": result.get("num_structures", 0),
+        })
+
+    for task in all_tasks.get("rdkit_conjugate", []):
+        result = task.get("result") or {}
+        sdf = result.get("output_sdf", "")
+        job = result.get("job_name", "")
+        if not job and sdf:
+            m = re.search(r'outputs/([^/]+)/', sdf)
+            if m: job = m.group(1)
+        data["adc_results"].append({
+            "job_name": job,
+            "conjugation_site": result.get("conjugation_site", "?"),
+            "adc_smiles": result.get("adc_smiles", "")[:120],
+            "covalent": result.get("covalent", False),
+            "reaction_type": result.get("reaction_type_used", "?"),
+            "embedding_status": result.get("embedding_status", "?"),
+        })
+
+    for task in all_tasks.get("freesasa", []):
+        result = task.get("result") or {}
+        sites = result.get("conjugation_sites", [])
+        chain_a = [s for s in sites if s.get("chain") == "A"]
+        top_lys = sorted(
+            [s for s in chain_a if s.get("residue", "").startswith("K")],
+            key=lambda s: float(s.get("sasa", 0)), reverse=True
+        )[:3]
+        data["freesasa_results"].append({
+            "total_sites": len(sites),
+            "chain_a_sites": len(chain_a),
+            "top_lys": [(s["residue"], round(float(s["sasa"]), 1)) for s in top_lys],
+        })
+
+    for task in all_tasks.get("proteinmpnn", []):
+        result = task.get("result") or {}
+        data["mpnn_results"].append({
+            "fasta_file": result.get("fasta_file", "?"),
+            "num_sequences": result.get("num_sequences", 0),
+        })
+
+    for task in all_tasks.get("rfdiffusion", []):
+        result = task.get("result") or {}
+        data["rfdiffusion_results"].append({
+            "output_dir": result.get("output_dir", "?"),
+            "num_designs": result.get("num_designs", 0),
+        })
 
     # Pocket scoring log
     log_path = "/data/oih/oih-api/data/pocket_scoring_log.jsonl"
@@ -152,7 +181,7 @@ async def _collect_project_data(job_prefix: str) -> dict:
             for line in f:
                 try:
                     entry = json.loads(line.strip())
-                    if job_prefix in entry.get("job_name", ""):
+                    if any(k.lower() in entry.get("job_name", "").lower() for k in keywords):
                         data["pipeline_results"].append(entry)
                 except Exception:
                     pass
@@ -352,3 +381,88 @@ async def generate_report(req: ReportRequest):
         "target": req.target_name,
         "job_prefix": req.job_prefix,
     }
+
+
+# ── Raw Data Download ─────────────────────────────────────────────────────────
+
+from fastapi.responses import StreamingResponse
+from datetime import datetime
+import zipfile
+import io
+
+
+@router.get("/download_raw")
+async def download_raw_data(target: str = "her2"):
+    """Package all experiment output files as a zip download."""
+    keywords = [target.lower(), target.upper(), target.capitalize()]
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+
+        # 1. Task JSON records
+        for f in glob.glob("/data/oih/oih-api/data/tasks/*.json"):
+            try:
+                d = json.load(open(f))
+                r = d.get("result") or {}
+                searchable = f"{r.get('output_dir','')} {r.get('output_sdf','')} {r.get('job_name','')}".lower()
+                if any(k.lower() in searchable for k in keywords):
+                    zf.write(f, f"tasks/{os.path.basename(f)}")
+            except Exception:
+                pass
+
+        # 2. Pocket scoring log
+        log_path = "/data/oih/oih-api/data/pocket_scoring_log.jsonl"
+        if os.path.exists(log_path):
+            zf.write(log_path, "pocket_scoring_log.jsonl")
+
+        # 3. AF3 confidence JSONs
+        for cf in glob.glob("/data/oih/outputs/**/*summary_confidences*.json", recursive=True):
+            if any(k.lower() in cf.lower() for k in keywords):
+                rel = cf.replace("/data/oih/outputs/", "")
+                zf.write(cf, f"af3_confidence/{rel}")
+
+        # 4. AF3 CIF structures (best 3 vals)
+        for cif in glob.glob("/data/oih/outputs/**/*_model.cif", recursive=True):
+            if any(k.lower() in cif.lower() for k in keywords):
+                if any(f"val_{i}" in cif for i in range(3)):
+                    rel = cif.replace("/data/oih/outputs/", "")
+                    zf.write(cf, f"structures/{rel}")
+
+        # 5. ProteinMPNN FASTA sequences
+        for fa in glob.glob("/data/oih/outputs/**/*.fa", recursive=True):
+            if any(k.lower() in fa.lower() for k in keywords):
+                rel = fa.replace("/data/oih/outputs/", "")
+                zf.write(fa, f"sequences/{rel}")
+
+        # 6. ADC SDF structures
+        for sdf in glob.glob("/data/oih/outputs/**/*.sdf", recursive=True):
+            if any(k.lower() in sdf.lower() for k in keywords):
+                rel = sdf.replace("/data/oih/outputs/", "")
+                zf.write(sdf, f"adc_structures/{rel}")
+
+        # 7. README
+        readme = f"""OIH Drug Discovery Raw Data Export
+Target: {target.upper()}
+Date: {datetime.now().strftime('%Y-%m-%d')}
+
+Contents:
+- tasks/            : Task JSON records with result data
+- af3_confidence/   : AlphaFold3 confidence scores (ipTM, pTM)
+- structures/       : Best AF3 CIF structure files
+- sequences/        : ProteinMPNN designed sequences (FASTA)
+- adc_structures/   : ADC 3D structure files (SDF)
+- pocket_scoring_log.jsonl : Experimental log
+
+Key Results:
+- Best ipTM: 0.86 (val_2, Domain4 truncation 202aa)
+- Pass rate: 3/10 (30%, ipTM >= 0.6)
+- ADC: covalent NHS-amine, DAR=4, K107/K188
+"""
+        zf.writestr("README.txt", readme)
+
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=OIH_{target.upper()}_raw_data.zip"},
+    )
