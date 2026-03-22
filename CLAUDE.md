@@ -801,3 +801,17 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 - 新增靶标时需同时更新 `DOMAIN_REGISTRY` 和 `KNOWN_COMPLEXES`
 - 多个可成药域 → 分别跑AF3，取最高ipTM
 - `num_seeds=3` 用于 binder_design_pipeline AF3 验证（速度/准确性平衡）
+
+### GPU VRAM 限制（RTX 4090, 44GB）
+- GPU Semaphore = 1（同一时间只跑 1 个 GPU 任务，防止 OOM）
+- AF3: ~20GB（必须独占）
+- RFdiffusion: ~8GB
+- BindCraft: ~16GB
+- DiffDock: ~8GB
+- DiscoTope3: ~6GB（ESM-IF1 1.6GB + XGBoost）
+- 两个大模型并发 = 必然 OOM
+
+### 5LGD (CD36) 注意事项
+- PDB 包含 chain A (CD36) + chain B (PfEMP1 malaria protein)
+- pipeline 必须指定 `chains="A"` 过滤，否则 DiscoTope3 报 "No valid PDB"
+- CD36 残基范围: 35-434 (400 residues)
