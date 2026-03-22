@@ -54,8 +54,17 @@ REACTION_REGISTRY = {
     # ── Type 2: NHS ester / acid-amine (lysine conjugation) ──────────────────
     "nhs_amine": {
         "smarts_chain": [
-            "[C:1](=O)[OH1].[NH2:2]>>[C:1](=O)[NH1:2]",
+            # NHS ester + primary amine → amide
             "[C:1](=O)ON1C(=O)CCC1=O.[NH2:2]>>[C:1](=O)[NH1:2]",
+            # Carboxylic acid + primary amine → amide
+            "[C:1](=O)[OH1].[NH2:2]>>[C:1](=O)[NH1:2]",
+            # NHS ester + secondary amine (N-methyl, e.g. MMAE) → amide
+            "[C:1](=O)ON1C(=O)CCC1=O.[NH1:2]>>[C:1](=O)[N:2]",
+            # Carboxylic acid + secondary amine → amide
+            "[C:1](=O)[OH1].[NH1:2]>>[C:1](=O)[N:2]",
+            # Amide coupling with N(C) (tertiary-like in MMAE context)
+            "[C:1](=O)ON1C(=O)CCC1=O.[NH0:2]([CH3])[#6:3]>>[C:1](=O)[N:2]([CH3])[#6:3]",
+            # Acid + hydroxyl → ester (fallback)
             "[C:1](=O)[OH1].[OH1:2][#6:3]>>[C:1](=O)[O:2][#6:3]",
             "[C:1](=O)ON1C(=O)CCC1=O.[OH1:2]>>[C:1](=O)[O:2]",
         ],
@@ -144,7 +153,8 @@ REACTION_REGISTRY = {
 # Generic fallback reactions (tried when primary type fails)
 _GENERIC_SMARTS = [
     ("amide",  "[C:1](=O)[OH1].[NH2:2]>>[C:1](=O)[NH1:2]"),
-    ("amide",  "[C:1](=O)[OH1].[NH1:2]>>[C:1](=O)[N:2]"),
+    ("amide_sec", "[C:1](=O)[OH1].[NH1:2]>>[C:1](=O)[N:2]"),
+    ("nhs_amide", "[C:1](=O)ON1C(=O)CCC1=O.[NH1:2]>>[C:1](=O)[N:2]"),
     ("ester",  "[C:1](=O)[OH1].[OH1:2][#6:3]>>[C:1](=O)[O:2][#6:3]"),
     ("ester",  "[C:1](=O)Cl.[OH1:2]>>[C:1](=O)[O:2]"),
     ("anhydride_open", "[C:1](=O)[O:4][C:2](=O).[OH1:3]>>[C:1](=O)[O:3].[C:2](=O)[OH1]"),
