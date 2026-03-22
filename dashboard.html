@@ -1070,7 +1070,7 @@ function App(){
         </div>
       </div>);
 
-    case 'sites':
+    case 'sites': {
       const allSites=rd.sites||[];
       const chainASites=allSites.filter(s=>(s.chain||'')==='A');
       const lysSites=chainASites.filter(s=>(s.residue||'').startsWith('K')).sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0));
@@ -1125,6 +1125,7 @@ function App(){
           </div>
         )}
       </div>);
+    }
 
     case 'linker':
       return(<div className="p-4 space-y-3">
@@ -1158,7 +1159,7 @@ function App(){
         </div>
       </div>);
 
-    case 'adc':
+    case 'adc': {
       const adcIptm=rd.iptm||rd.pipeline?.adc_design?.iptm;
       const adcSite=rd.conjugation_site||rd.sites?.[0]?.residue||rd.pipeline?.adc_design?.conjugation_site;
       const adcSasa=rd.sites?.[0]?.sasa;
@@ -1232,6 +1233,7 @@ function App(){
           </div>
         )}
       </div>);
+    }
 
     case 'md':
       return(<div className="p-4 space-y-4">
@@ -1258,7 +1260,7 @@ function App(){
         </div>
       </div>);
 
-    case 'pipeline':
+    case 'pipeline': {
       const pl=rd.pipeline||{};
       const plSteps=pl.steps||{};
       const plAdc=pl.adc_design||{};
@@ -1347,6 +1349,7 @@ function App(){
           {plAdc.partial&&<p className="text-[10px] text-[#a0aec0] mt-1">Pipeline completed partially — some steps failed</p>}
         </div>)}
       </div>);
+    }
 
     case 'hub':
       // Group tasks by tool
