@@ -142,7 +142,7 @@ class TaskManager:
 
         # Semaphores (safe to create outside async context in Python 3.10+)
         self._cpu_sem      = asyncio.Semaphore(8)
-        self._gpu_sem      = asyncio.Semaphore(1)   # RTX 4090 44GB — one GPU task at a time to prevent OOM
+        self._gpu_sem      = asyncio.Semaphore(2)   # RTX 4090 44GB — 2 slots: 1 for pipeline + 1 for its GPU sub-task
         self._degraded_sem = asyncio.Semaphore(4)
 
         # Live active-slot counters (incremented inside semaphore, decremented on exit)
@@ -332,7 +332,7 @@ class TaskManager:
                 logger.info(
                     f"[{queue.value.upper()}] START {tool}/{task.task_id[:8]} "
                     f"| cpu={self._cpu_active}/{8} "
-                    f"gpu={self._gpu_active}/{3} "
+                    f"gpu={self._gpu_active}/{2} "
                     f"deg={self._degraded_active}/{4}"
                 )
                 try:
@@ -352,7 +352,7 @@ class TaskManager:
                     logger.info(
                         f"[{queue.value.upper()}] DONE {tool}/{task.task_id[:8]} "
                         f"| cpu={self._cpu_active}/{8} "
-                        f"gpu={self._gpu_active}/{3} "
+                        f"gpu={self._gpu_active}/{2} "
                         f"deg={self._degraded_active}/{4}"
                     )
 
