@@ -1003,7 +1003,7 @@ ALL_TOOLS = [
                 "properties": {
                     "target_name": {"type": "string", "default": "HER2", "description": "Target protein name"},
                     "job_prefix": {"type": "string", "description": "Job name prefix to filter results, e.g. 'her2_tier1_v2'"},
-                    "include_rag": {"type": "boolean", "default": true, "description": "Include RAG literature search"},
+                    "include_rag": {"type": "boolean", "default": True, "description": "Include RAG literature search"},
                 },
                 "required": ["job_prefix"],
             },
