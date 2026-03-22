@@ -94,3 +94,40 @@ cat <output_dir>/*ranking_scores.csv   # 读取真实 ipTM
 - `num_seeds=3` 用于 binder_design_pipeline AF3 验证（速度/准确性平衡）
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->
+
+## DOMAIN_REGISTRY 抗原域截取（2026-03-22 验证）
+
+AF3 对短序列复合物预测更准确。pipeline 自动按 DOMAIN_REGISTRY 截取抗原结构域。
+
+### 已注册靶标
+| 靶标 | 域名 | UniProt 范围 | 截取后长度 | 说明 |
+|------|------|-------------|-----------|------|
+| HER2 | domain4 | 488-630 | ~202aa | trastuzumab 表位 C558-C573 |
+| HER2 | domain2 | 172-308 | ~196aa | pertuzumab 表位 |
+| CD36 | extracellular | 30-439 | ~469aa | 胞外大环 |
+| EGFR | domain3 | 361-481 | ~180aa | cetuximab 表位 |
+| PD-L1 | IgV | 19-127 | ~168aa | PD-1 结合界面 |
+
+### HER2 实测结果
+| Design | 抗原长度 | ipTM | 结论 |
+|--------|---------|------|------|
+| val_0 | 1015aa (全长) | 0.84 | ✅ |
+| val_1 | 1015aa (全长) | 0.70 | ✅ |
+| val_2 | 202aa (Domain4) | **0.86** | ✅ 截短更优 |
+
+### 截取规则
+- padding = 30aa（域边界两侧各保留 30aa 柔性区）
+- 未知蛋白以 hotspot 中心 ±100aa 截取
+- 多个可成药域 → 分别跑 AF3，取最高 ipTM
+
+## AF3 动态超时
+| 总序列长度 | Timeout |
+|-----------|---------|
+| <500aa | 1200s (20min) |
+| 500-1000aa | 2400s (40min) |
+| >1000aa | 3600s (60min) |
+
+## GPU VRAM 限制
+- AF3 ~20GB，必须独占 GPU
+- GPU Semaphore = 1（同一时间只跑 1 个 GPU 任务）
+- RTX 4090 总共 44GB，两个大模型并发 = OOM

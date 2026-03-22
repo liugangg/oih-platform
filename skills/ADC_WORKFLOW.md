@@ -119,3 +119,24 @@ binder_design 模式自动对靶蛋白 PDB 进行：
 - 每步 try/except，单步失败标记 partial，不阻塞后续
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->
+
+## NHS-amine Linker 支持（2026-03-22）
+de novo binder 通常无游离 Cys → 用 NHS-amine (Lys 偶联)
+
+| Linker | 类型 | 裂解 | DAR | 适用 |
+|--------|------|------|-----|------|
+| NHS-PEG4 | nhs_amine | 不可裂解 | 2-4 | Lys 偶联，类似 T-DM1 |
+| NHS-PEG2-Val-Cit-PABC | nhs_amine | cathepsin B | 2-4 | Lys 偶联 + 可裂解 |
+
+### 选择规则
+- FreeSASA 检测到 Cys (SASA>40) → maleimide_thiol
+- 只有 Lys → nhs_amine
+- De novo binder 通常只有 Lys → 默认 nhs_amine
+
+## FreeSASA 注意事项
+- **不接受 CIF 文件** — 必须先转 PDB（BioPython MMCIFParser → PDBIO）
+- pipeline 中已自动处理 CIF→PDB 转换
+
+## RDKit 3D Embedding 限制
+- 大分子 ADC EmbedMolecule 可能失败
+- fallback: 返回 2D SMILES (`embedding_status="2d_only"`)，任务标记 completed
