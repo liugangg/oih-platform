@@ -1,0 +1,1 @@
+{"job_name":"her2_tier1_v2","target":"HER2","tier":1,"hotspot_source":"KNOWN_COMPLEXES/1N8Z","hotspot_method":"structural_database","hotspots":["C558","C571","C572","C573","C603","C560","C570","C557"],"best_iptm":0.84,"second_iptm":0.70,"passed":true,"binder_type":"de_novo","af3_designs_tested":2,"af3_designs_passed":2,"date":"2026-03-22"}

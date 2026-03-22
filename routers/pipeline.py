@@ -23,6 +23,171 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ============================================================
+# AF3 Antigen Domain Registry
+# 基于文献：序列截取保留完整结构域，避免破坏二硫键和折叠单元
+# 原则：
+#   1. 按UniProt/Pfam结构域边界截取，不按残基数截取
+#   2. 多个可成药域 → 分别跑AF3，各自验证
+#   3. 未知蛋白 → 用hotspot定位域边界
+#   4. padding=30aa 保留边界柔性区
+# 参考：Yin et al. Protein Science 2024; PMC12360200 (AF3 nanobody benchmark)
+# ============================================================
+
+DOMAIN_REGISTRY = {
+    # HER2 / ERBB2 (UniProt P04626)
+    "HER2": {
+        "uniprot": "P04626",
+        "signal_peptide_offset": 22,
+        "druggable_domains": [
+            {
+                "name": "domain2",
+                "range": (172, 308),
+                "hotspot_center": 240,
+                "description": "Dimerization arm, pertuzumab epitope",
+            },
+            {
+                "name": "domain4",
+                "range": (488, 630),
+                "hotspot_center": 565,
+                "description": "Trastuzumab epitope, C558-C573",
+            },
+        ],
+    },
+    # CD36 (UniProt P16671)
+    "CD36": {
+        "uniprot": "P16671",
+        "signal_peptide_offset": 0,
+        "druggable_domains": [
+            {
+                "name": "extracellular_loop",
+                "range": (30, 439),
+                "hotspot_center": 200,
+                "description": "Major extracellular domain, fatty acid binding",
+            },
+        ],
+    },
+    # EGFR (UniProt P00533)
+    "EGFR": {
+        "uniprot": "P00533",
+        "signal_peptide_offset": 24,
+        "druggable_domains": [
+            {
+                "name": "domain1",
+                "range": (25, 189),
+                "hotspot_center": 100,
+                "description": "Ligand binding domain I",
+            },
+            {
+                "name": "domain3",
+                "range": (361, 481),
+                "hotspot_center": 420,
+                "description": "Ligand binding domain III, cetuximab epitope",
+            },
+        ],
+    },
+    # PD-L1 (UniProt Q9NZQ7)
+    "PDL1": {
+        "uniprot": "Q9NZQ7",
+        "signal_peptide_offset": 18,
+        "druggable_domains": [
+            {
+                "name": "ig_v_domain",
+                "range": (19, 127),
+                "hotspot_center": 73,
+                "description": "IgV domain, PD-1 binding interface",
+            },
+        ],
+    },
+}
+
+DOMAIN_PADDING = 30  # 域边界两侧各保留30aa
+
+
+def _get_af3_antigen_regions(
+    target_name: str,
+    target_seq: str,
+    hotspot_residues: list = None,
+) -> list:
+    """
+    返回需要跑AF3验证的抗原域列表。
+
+    已知蛋白：从 DOMAIN_REGISTRY 取域边界
+    未知蛋白：用 hotspot_residues 定位，取包含hotspot的最小完整区域
+    多个域：返回多个dict，pipeline对每个域分别提交AF3任务
+
+    返回格式：
+    [{"domain_name": str, "sequence": str, "offset": int, "description": str, "original_range": tuple}, ...]
+    """
+    regions = []
+
+    # 查找已知蛋白（不区分大小写）
+    registry_key = None
+    for key in DOMAIN_REGISTRY:
+        if key.upper() in target_name.upper():
+            registry_key = key
+            break
+
+    # 解析hotspot残基编号
+    hotspot_nums = []
+    if hotspot_residues:
+        for h in hotspot_residues:
+            try:
+                hotspot_nums.append(int(re.sub(r'[A-Za-z_:]', '', str(h))))
+            except (ValueError, TypeError):
+                pass
+
+    if registry_key:
+        entry = DOMAIN_REGISTRY[registry_key]
+        offset_correction = entry.get("signal_peptide_offset", 0)
+
+        for domain in entry["druggable_domains"]:
+            start, end = domain["range"]
+
+            if hotspot_nums:
+                # 检查hotspot是否在此域内（考虑信号肽偏移）
+                adjusted_hotspots = [h - offset_correction for h in hotspot_nums]
+                if not any(start - 20 <= h <= end + 20 for h in adjusted_hotspots):
+                    continue
+
+            # 加padding，不超出序列边界
+            seq_start = max(0, start - DOMAIN_PADDING - offset_correction)
+            seq_end = min(len(target_seq), end + DOMAIN_PADDING - offset_correction)
+
+            regions.append({
+                "domain_name": domain["name"],
+                "sequence": target_seq[seq_start:seq_end],
+                "offset": seq_start,
+                "description": domain["description"],
+                "original_range": (start, end),
+            })
+
+    else:
+        # 未知蛋白：用hotspot定位
+        if hotspot_nums:
+            center = sum(hotspot_nums) // len(hotspot_nums)
+            seq_start = max(0, center - 100)
+            seq_end = min(len(target_seq), center + 100)
+        else:
+            seq_start, seq_end = 0, len(target_seq)
+
+        regions.append({
+            "domain_name": "unknown_region",
+            "sequence": target_seq[seq_start:seq_end],
+            "offset": seq_start,
+            "description": f"Auto-detected region around center {center if hotspot_nums else 'full'}",
+            "original_range": (seq_start, seq_end),
+        })
+
+    return regions if regions else [{
+        "domain_name": "full_length",
+        "sequence": target_seq,
+        "offset": 0,
+        "description": "Full length (no domain match found)",
+        "original_range": (0, len(target_seq)),
+    }]
+
+
 def _make_dry_run_coroutine(mock_result: dict):
     """Return an async callable that immediately returns mock_result."""
     async def _dry(task):
@@ -1327,27 +1492,77 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
                 top_designs = all_designs[:top_n]
 
                 from routers.structure_prediction import predict_alphafold3
+
+                # Get antigen domain regions for AF3 validation
+                _target_name = getattr(req, 'target_name', '') or req.job_name
+                _hotspots = getattr(req, 'hotspot_residues', None) or []
+                antigen_regions = _get_af3_antigen_regions(
+                    target_name=_target_name,
+                    target_seq=target_seq,
+                    hotspot_residues=_hotspots,
+                )
+                logger.info("[binder_pipeline] AF3 antigen regions: %s",
+                            [(r["domain_name"], len(r["sequence"])) for r in antigen_regions])
+
                 validated_designs = []
                 for i, design in enumerate(top_designs):
                     task.progress = 75 + int(20 * i / max(top_n, 1))
-                    task.progress_msg = f"Step 3/7: AF3 validating design {i+1}/{top_n}..."
                     binder_seq = design.get("sequence", "")
                     if not binder_seq:
                         continue
 
-                    # Submit AF3 complex prediction: binder + target
-                    af3_ref = await predict_alphafold3(AlphaFold3Request(
-                        job_name=f"{req.job_name}_af3_val_{i}",
-                        chains=[
-                            AF3Chain(type="protein", sequence=binder_seq),
-                            AF3Chain(type="protein", sequence=target_seq),
-                        ],
-                        num_seeds=1,
-                    ))
-                    try:
-                        af3_result = await _wait_for_af3_task(af3_ref.task_id)
-                    except Exception as e:
-                        logger.warning("[binder_pipeline] AF3 failed for design %d: %s", i, e)
+                    # Validate against each antigen domain region
+                    best_iptm_for_design = None
+                    best_result_for_design = None
+                    best_region_for_design = None
+
+                    for region in antigen_regions:
+                        task.progress_msg = (
+                            f"Step 3/7: AF3 design {i+1}/{top_n} "
+                            f"vs {region['domain_name']} ({len(region['sequence'])}aa)..."
+                        )
+
+                        af3_ref = await predict_alphafold3(AlphaFold3Request(
+                            job_name=f"{req.job_name}_{region['domain_name']}_val_{i}",
+                            chains=[
+                                AF3Chain(type="protein", sequence=binder_seq),
+                                AF3Chain(type="protein", sequence=region["sequence"]),
+                            ],
+                            num_seeds=3,
+                        ))
+                        try:
+                            af3_result = await _wait_for_af3_task(af3_ref.task_id)
+                        except Exception as e:
+                            logger.warning("[binder_pipeline] AF3 failed for design %d/%s: %s",
+                                           i, region["domain_name"], e)
+                            continue
+
+                        # Parse ipTM
+                        iptm = None
+                        for cf in af3_result.get("confidence_files", []):
+                            try:
+                                with open(cf) as f:
+                                    conf = json.load(f)
+                                iptm = conf.get("iptm", conf.get("ipTM"))
+                                if iptm is not None:
+                                    break
+                            except Exception:
+                                continue
+
+                        if iptm is not None and (best_iptm_for_design is None or iptm > best_iptm_for_design):
+                            best_iptm_for_design = iptm
+                            best_result_for_design = af3_result
+                            best_region_for_design = region
+
+                        if len(antigen_regions) > 1 and iptm is not None:
+                            await asyncio.sleep(3)
+
+                    # Use best domain result for this design
+                    if best_result_for_design is not None:
+                        af3_result = best_result_for_design
+                        iptm = best_iptm_for_design
+                    else:
+                        # All domains failed for this design
                         validated_designs.append({
                             "rank": i + 1,
                             "sequence": binder_seq,
@@ -1356,26 +1571,14 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
                             "confidence": "failed",
                             "af3_structure_path": None,
                             "passed_validation": False,
-                            "error": str(e),
+                            "domain": best_region_for_design["domain_name"] if best_region_for_design else None,
+                            "error": "all_domains_failed",
                         })
-                        # 5s delay before next submission to avoid GPU OOM
                         if i < top_n - 1:
                             await asyncio.sleep(5)
                         continue
 
-                    # Parse ipTM from summary_confidences JSON
-                    iptm = None
-                    for cf in af3_result.get("confidence_files", []):
-                        try:
-                            with open(cf) as f:
-                                conf = json.load(f)
-                            iptm = conf.get("iptm", conf.get("ipTM"))
-                            if iptm is not None:
-                                break
-                        except Exception:
-                            continue
-
-                    # Determine structure output path
+                    # Determine structure output path from best domain result
                     cif_files = af3_result.get("cif_files", [])
                     af3_structure_path = os.path.dirname(cif_files[0]) if cif_files else None
 
@@ -1398,6 +1601,9 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
                         "confidence": confidence,
                         "af3_structure_path": af3_structure_path,
                         "passed_validation": passed,
+                        "domain": best_region_for_design["domain_name"] if best_region_for_design else None,
+                        "antigen_offset": best_region_for_design["offset"] if best_region_for_design else 0,
+                        "antigen_length": len(best_region_for_design["sequence"]) if best_region_for_design else len(target_seq),
                     })
 
                     # 5s delay before next submission to avoid GPU OOM

@@ -794,3 +794,10 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 ### pLDDT Quality Expectations by Tier
 - Tier 1 hotspots → RFdiffusion backbone quality: pLDDT > 70 expected
 - Tier 3 hotspots → RFdiffusion backbone quality: pLDDT 40-70, need more designs
+
+### AF3 Antigen Domain Registry (`DOMAIN_REGISTRY` in pipeline.py)
+- AF3 验证时按结构域截取抗原序列，避免全长序列降低ipTM精度
+- 已知蛋白按 UniProt/Pfam 域边界截取，padding=30aa
+- 新增靶标时需同时更新 `DOMAIN_REGISTRY` 和 `KNOWN_COMPLEXES`
+- 多个可成药域 → 分别跑AF3，取最高ipTM
+- `num_seeds=3` 用于 binder_design_pipeline AF3 验证（速度/准确性平衡）
