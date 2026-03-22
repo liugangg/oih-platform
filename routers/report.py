@@ -1,15 +1,22 @@
 """
 Report Generation Router
 Collects experiment data, queries Qwen for analysis, returns markdown report
+Server-side chart generation with matplotlib (no html2canvas dependency)
 """
 import json
 import glob
 import os
 import re
 import logging
+import base64
+from io import BytesIO
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from typing import Optional, List
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -153,6 +160,124 @@ async def _collect_project_data(job_prefix: str) -> dict:
     return data
 
 
+# ── Chart Generation (server-side matplotlib) ────────────────────────────────
+
+def _fig_to_base64(fig) -> str:
+    buf = BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                facecolor='#0f1117', edgecolor='none')
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode()
+
+
+def generate_iptm_chart(af3_results: list) -> str:
+    """AF3 ipTM distribution bar chart."""
+    # Sort by ipTM descending, take top 10
+    sorted_results = sorted(af3_results, key=lambda r: r.get('iptm', 0), reverse=True)[:10]
+    fig, ax = plt.subplots(figsize=(8, 4))
+    fig.patch.set_facecolor('#0f1117')
+    ax.set_facecolor('#1a1f2e')
+
+    names = []
+    for r in sorted_results:
+        jn = r.get('job_name', '?')
+        m = re.search(r'val[_]?(\d+)', jn)
+        names.append(f'val_{m.group(1)}' if m else jn[-8:])
+    iptms = [r.get('iptm', 0) for r in sorted_results]
+    colors = ['#00d4aa' if i >= 0.6 else '#ff4757' for i in iptms]
+
+    bars = ax.bar(names, iptms, color=colors, edgecolor='none', width=0.6)
+    ax.axhline(y=0.6, color='#ffd700', linestyle='--', linewidth=1.5, label='Threshold (0.6)')
+
+    ax.set_title('AF3 ipTM Scores', color='white', pad=15, fontsize=12)
+    ax.set_ylabel('ipTM', color='#a0aec0')
+    ax.set_ylim(0, 1.0)
+    ax.tick_params(colors='#a0aec0')
+    ax.legend(facecolor='#1a1f2e', labelcolor='white')
+
+    for bar, val in zip(bars, iptms):
+        if val > 0:
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
+                    f'{val:.2f}', ha='center', va='bottom', color='white', fontsize=9)
+
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#2d3748')
+
+    return _fig_to_base64(fig)
+
+
+def generate_sasa_chart(freesasa_results: list) -> str:
+    """SASA conjugation site bar chart."""
+    n = min(len(freesasa_results), 3)
+    if n == 0:
+        return ""
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 4))
+    fig.patch.set_facecolor('#0f1117')
+    if n == 1:
+        axes = [axes]
+
+    labels = ['val_0', 'val_1', 'val_2']
+    for idx, (ax, result) in enumerate(zip(axes, freesasa_results[:3])):
+        ax.set_facecolor('#1a1f2e')
+        top_lys = result.get('top_lys', [])
+        if not top_lys:
+            continue
+        residues = [t[0] for t in top_lys]
+        sasas = [t[1] for t in top_lys]
+        colors = ['#ff4757'] + ['#f6993f'] * (len(residues) - 1)
+
+        ax.bar(residues, sasas, color=colors, edgecolor='none', width=0.6)
+        ax.set_title(f'Chain A SASA — {labels[idx] if idx < len(labels) else ""}',
+                     color='white', fontsize=10)
+        ax.set_ylabel('SASA (A²)', color='#a0aec0')
+        ax.tick_params(colors='#a0aec0', axis='both')
+        for spine in ax.spines.values():
+            spine.set_edgecolor('#2d3748')
+
+    plt.tight_layout()
+    return _fig_to_base64(fig)
+
+
+def generate_adc_mol_image(smiles: str) -> str:
+    """RDKit 2D molecule image as base64 PNG."""
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import Draw
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            return ""
+        img = Draw.MolToImage(mol, size=(500, 300))
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode()
+    except Exception:
+        return ""
+
+
+def _generate_charts(project_data: dict) -> dict:
+    """Generate all charts, return dict of name→base64 PNG."""
+    charts = {}
+    if project_data.get('af3_results'):
+        try:
+            charts['iptm_chart'] = generate_iptm_chart(project_data['af3_results'])
+        except Exception as e:
+            logger.warning("ipTM chart failed: %s", e)
+    if project_data.get('freesasa_results'):
+        try:
+            charts['sasa_chart'] = generate_sasa_chart(project_data['freesasa_results'])
+        except Exception as e:
+            logger.warning("SASA chart failed: %s", e)
+    for i, adc in enumerate(project_data.get('adc_results', [])[:3]):
+        smiles = adc.get('adc_smiles', '')
+        if smiles and '.' not in smiles:
+            img = generate_adc_mol_image(smiles)
+            if img:
+                charts[f'adc_mol_{i}'] = img
+    return charts
+
+
 @router.post("/generate")
 async def generate_report(req: ReportRequest):
     """
@@ -217,8 +342,12 @@ async def generate_report(req: ReportRequest):
         logger.warning("Qwen report generation failed: %s", e)
         report_md = f"# Report Generation Failed\n\nError: {e}\n\n## Raw Data\n```json\n{json.dumps(project_data, indent=2)[:5000]}\n```"
 
+    # Step 4: Generate charts (server-side matplotlib)
+    charts = _generate_charts(project_data)
+
     return {
         "report_markdown": report_md,
+        "charts": charts,
         "data": project_data,
         "target": req.target_name,
         "job_prefix": req.job_prefix,
