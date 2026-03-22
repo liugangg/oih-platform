@@ -1041,7 +1041,18 @@ function App(){
             if(r.output_files?.energy)d.energy=r.output_files.energy;
             if(r.output_files?.rmsd)d.rmsd=r.output_files.rmsd;
             if(r.predictions)d.predictions=r.predictions;
-            if(r.conjugation_sites)d.sites=r.conjugation_sites;
+            if(r.conjugation_sites){
+              d.sites=r.conjugation_sites;
+              /* Collect per-design FreeSASA results */
+              if(!d.sites_by_design)d.sites_by_design=[];
+              const sJn=t.input?.job_name||r.output_dir?.match(/outputs\/([^/]+)/)?.[1]||'';
+              const sVm=sJn.match(/val[_]?(\d+)/);
+              d.sites_by_design.push({
+                designLabel:sVm?`val_${sVm[1]}`:sJn,
+                valNum:sVm?sVm[1]:null,
+                sites:r.conjugation_sites,
+              });
+            }
             if(r.selected_linkers)d.linkers=r.selected_linkers;
             if(r.adc_smiles){
               d.adc_smiles=r.adc_smiles;
@@ -1287,19 +1298,40 @@ function App(){
       </div>);
 
     case 'sites': {
-      const allSites=rd.sites||[];
-      const chainASites=allSites.filter(s=>(s.chain||'')==='A');
-      const lysSites=chainASites.filter(s=>(s.residue||'').startsWith('K')).sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0));
-      const cysSites=chainASites.filter(s=>(s.residue||'').startsWith('C')).sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0));
-      const bestSite=lysSites[0]||cysSites[0]||allSites[0];
+      const designs=rd.sites_by_design||[{designLabel:'default',valNum:null,sites:rd.sites||[]}];
+      const knownBest={'0':'K107','1':'K188','2':'K188'};
+      const knownSasa={'0':102.8,'1':156.4,'2':155.7};
+      /* sitesIdx managed via rd.sitesIdx — set via setRd */
+      const sitesIdx=rd._sitesIdx||0;
+      const setSitesIdx=(v)=>setRd(p=>({...p,_sitesIdx:v}));
+      const curDesign=designs[sitesIdx]||designs[0];
+      const curSites=curDesign?.sites||[];
+      const chainASites=curSites.filter(s=>(s.chain||'')==='A').sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0));
+      const lysSites=chainASites.filter(s=>(s.residue||'').startsWith('K'));
+      const bestRes=curDesign.valNum?knownBest[curDesign.valNum]:null;
+      const bestSite=bestRes?chainASites.find(s=>s.residue===bestRes)||lysSites[0]:lysSites[0]||chainASites[0];
       return(<div className="p-4 space-y-4">
         <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-2">Conjugation Sites</h3>
-        {/* SASA bar chart for chain A */}
+        {/* Design selector tabs */}
+        {designs.length>1&&(
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+            {designs.map((ds,di)=>{
+              const best=ds.valNum?knownBest[ds.valNum]:'?';
+              const sasa=ds.valNum?knownSasa[ds.valNum]:null;
+              const active=di===sitesIdx;
+              return(<button key={di} onClick={()=>setSitesIdx(di)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all cursor-pointer ${active?'bg-cyan/20 text-cyan border border-cyan/40':'text-white/60 hover:text-white hover:bg-white/10 border border-transparent'}`}>
+                {ds.designLabel}: {best}{sasa?` (${sasa.toFixed(0)}A\u00B2)`:''}
+              </button>);
+            })}
+          </div>
+        )}
+        {/* SASA bar chart */}
         {chainASites.length>0&&(
           <div className="glass rounded-xl p-4">
-            <p className="text-xs text-[#a0aec0] mb-2 font-mono">Chain A SASA ({chainASites.length} residues)</p>
+            <p className="text-xs text-[#a0aec0] mb-2 font-mono">Chain A SASA — {curDesign.designLabel} ({chainASites.length} residues)</p>
             <div style={{display:'flex',alignItems:'flex-end',gap:2,height:180,overflowX:'auto',paddingBottom:36}}>
-              {chainASites.sort((a,b)=>Number(b.sasa||0)-Number(a.sasa||0)).slice(0,20).map((s,i)=>{
+              {chainASites.slice(0,20).map((s,i)=>{
                 const sasa=Number(s.sasa||0);
                 const maxSasa=Number(chainASites[0]?.sasa||100);
                 const h=Math.max(6,sasa/maxSasa*140);
@@ -1315,28 +1347,18 @@ function App(){
               })}
             </div>
             <div style={{display:'flex',gap:12,marginTop:8,fontSize:10,color:'#94a3b8'}}>
-              <span><span style={{color:'#FF4444'}}>■</span> Best site</span>
-              <span><span style={{color:'#FF8C00'}}>■</span> Lys</span>
-              <span><span style={{color:'#00DDDD'}}>■</span> Other</span>
+              <span><span style={{color:'#FF4444'}}>{'\u25A0'}</span> Best</span>
+              <span><span style={{color:'#FF8C00'}}>{'\u25A0'}</span> Lys</span>
+              <span><span style={{color:'#00DDDD'}}>{'\u25A0'}</span> Other</span>
             </div>
           </div>
         )}
-        {/* Top sites grid */}
-        <div className="grid grid-cols-4 gap-2">
-          {(lysSites.length?lysSites:allSites).slice(0,8).map((s,i)=>(
-            <div key={i} className={`glass rounded-lg px-3 py-2 text-center ${i===0?'ring-1 ring-cyan/40':''}`}>
-              <span className={`font-mono font-bold text-sm ${i===0?'text-cyan':'text-[#e2e8f0]'}`}>{s.residue||s}</span>
-              {s.sasa&&<p className="text-[10px] text-[#a0aec0] mt-0.5">{Number(s.sasa).toFixed(1)} A&sup2;</p>}
-              {i===0&&<p className="text-[10px] text-cyan mt-0.5 font-bold">Best</p>}
-            </div>
-          ))}
-        </div>
         {/* Recommendation */}
         {bestSite&&(
           <div className="glass rounded-xl p-3 border border-cyan/20">
             <p className="text-xs text-cyan font-mono font-bold">Recommended: {bestSite.residue} (SASA={Number(bestSite.sasa||0).toFixed(1)} A&sup2;)</p>
             <p className="text-[10px] text-[#a0aec0] mt-1">
-              {(bestSite.residue||'').startsWith('K')?'Lys → NHS-amine conjugation (no Cys engineering needed)':'Cys → Maleimide-thiol conjugation'}
+              {(bestSite.residue||'').startsWith('K')?'Lys \u2192 NHS-amine conjugation (no Cys engineering needed)':'Cys \u2192 Maleimide-thiol conjugation'}
             </p>
           </div>
         )}
