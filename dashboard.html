@@ -12,6 +12,9 @@
 <script src="https://unpkg.com/@rdkit/rdkit/Code/MinimalLib/dist/RDKit_minimal.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script>
 tailwind.config={theme:{extend:{
@@ -727,6 +730,166 @@ function CopyBtn({text}){
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
+/*  EXPORT REPORT                                                             */
+/* ══════════════════════════════════════════════════════════════════════════ */
+function ExportReportModal({show,onClose}){
+  const[step,setStep]=useState('');
+  const[progress,setProgress]=useState(0);
+  const[reportMd,setReportMd]=useState('');
+  const[error,setError]=useState(null);
+
+  const run=useCallback(async()=>{
+    setError(null);setReportMd('');
+    try{
+      setStep('Collecting experiment data...');setProgress(10);
+
+      setStep('Querying Qwen + RAG for analysis...');setProgress(30);
+      const resp=await fetch(`${API}/report/generate`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({target_name:'HER2',job_prefix:'her2_tier1_v2',include_rag:true}),
+      });
+      if(!resp.ok)throw new Error(`Report API: ${resp.status}`);
+      const result=await resp.json();
+      const md=result.report_markdown||'(empty report)';
+      setReportMd(md);
+      setStep('Report generated');setProgress(70);
+
+      setStep('Generating PDF...');setProgress(80);
+      await _generatePDF(md,result.data);
+      setStep('Done!');setProgress(100);
+    }catch(e){
+      setError(e.message);setStep('Failed');
+    }
+  },[]);
+
+  useEffect(()=>{if(show)run()},[show]);
+
+  if(!show)return null;
+  const modalBg={position:'fixed',inset:0,zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'};
+  const modalBox={width:600,maxHeight:'80vh',overflow:'auto',background:'#0f1117',border:'1px solid rgba(255,255,255,0.1)',borderRadius:16,padding:24};
+
+  return(
+    <div style={modalBg} onClick={onClose}>
+      <div style={modalBox} onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-bold text-[#e2e8f0] font-title">Export Report</h2>
+          <button onClick={onClose} className="text-[#94a3b8] hover:text-white text-lg">&times;</button>
+        </div>
+        {/* Progress */}
+        <div className="mb-4">
+          <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.1)',overflow:'hidden'}}>
+            <div style={{width:`${progress}%`,height:'100%',background:'linear-gradient(90deg,#00d4ff,#a855f7)',transition:'width 0.5s'}}/>
+          </div>
+          <p className="text-xs text-[#a0aec0] font-mono mt-2">{step}</p>
+          {error&&<p className="text-xs text-bad font-mono mt-1">{error}</p>}
+        </div>
+        {/* Report preview */}
+        {reportMd&&(
+          <div className="glass rounded-xl p-4 mt-4" style={{maxHeight:400,overflow:'auto'}}>
+            <div className="text-xs text-[#e2e8f0] font-mono leading-relaxed whitespace-pre-wrap"
+                 dangerouslySetInnerHTML={{__html:typeof marked!=='undefined'?marked.parse(reportMd):reportMd}}/>
+          </div>
+        )}
+        {/* Action buttons */}
+        <div className="flex gap-3 mt-4">
+          {reportMd&&<button onClick={()=>{navigator.clipboard?.writeText(reportMd)}}
+            className="px-4 py-2 text-xs font-mono rounded-lg bg-cyan/10 text-cyan hover:bg-cyan/20 transition-all">
+            Copy Markdown
+          </button>}
+          {reportMd&&<button onClick={()=>_downloadRawData()}
+            className="px-4 py-2 text-xs font-mono rounded-lg bg-purple/10 text-purple hover:bg-purple/20 transition-all">
+            Download Raw Data (.zip)
+          </button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+async function _generatePDF(md,data){
+  if(typeof jspdf==='undefined'&&typeof window.jspdf==='undefined')return;
+  const{jsPDF}=window.jspdf;
+  const pdf=new jsPDF('p','mm','a4');
+
+  /* Cover */
+  pdf.setFontSize(22);pdf.setFont('helvetica','bold');
+  pdf.text('OIH Drug Discovery Report',20,30);
+  pdf.setFontSize(11);pdf.setFont('helvetica','normal');
+  pdf.text(`Target: HER2 (ERBB2) | Date: ${new Date().toISOString().slice(0,10)}`,20,42);
+  const af3=data?.af3_results||[];
+  const bestIptm=af3.length?Math.max(...af3.map(a=>a.iptm||0)):0;
+  pdf.text(`Best ipTM: ${bestIptm.toFixed(2)} | AF3 Designs: ${af3.length} | ADC Designs: ${(data?.adc_results||[]).length}`,20,50);
+  pdf.setDrawColor(0,212,255);pdf.line(20,55,190,55);
+
+  /* Body */
+  const lines=md.split('\n');
+  let y=65;
+  lines.forEach(line=>{
+    if(y>275){pdf.addPage();y=20}
+    if(line.startsWith('# ')){pdf.setFontSize(15);pdf.setFont('helvetica','bold');y+=4}
+    else if(line.startsWith('## ')){pdf.setFontSize(12);pdf.setFont('helvetica','bold');y+=3}
+    else if(line.startsWith('### ')){pdf.setFontSize(10);pdf.setFont('helvetica','bold');y+=2}
+    else{pdf.setFontSize(9);pdf.setFont('helvetica','normal')}
+    const text=line.replace(/^#+\s/,'').replace(/\*\*/g,'').replace(/\*/g,'');
+    if(text.trim()){
+      const split=pdf.splitTextToSize(text,165);
+      split.forEach(s=>{if(y>275){pdf.addPage();y=20}pdf.text(s,20,y);y+=5});
+    }else{y+=3}
+  });
+
+  /* Chart screenshots */
+  try{
+    const chartEls=document.querySelectorAll('.mol3d, canvas');
+    for(const el of Array.from(chartEls).slice(0,3)){
+      try{
+        const canvas=await html2canvas(el,{backgroundColor:'#0f1117',scale:2});
+        pdf.addPage();
+        const imgData=canvas.toDataURL('image/png');
+        pdf.addImage(imgData,'PNG',10,10,190,100);
+      }catch(e){}
+    }
+  }catch(e){}
+
+  pdf.save(`OIH_HER2_Report_${Date.now()}.pdf`);
+}
+
+async function _downloadRawData(){
+  if(typeof JSZip==='undefined')return;
+  const zip=new JSZip();
+  try{
+    /* Pocket scoring log */
+    const logResp=await fetch(`${API}/outputs/pocket_scoring_log.jsonl`).catch(()=>null);
+    if(logResp?.ok) zip.file('pocket_scoring_log.jsonl',await logResp.text());
+
+    /* AF3 confidence JSONs */
+    const af3Folder=zip.folder('af3_confidences');
+    for(let i=0;i<3;i++){
+      try{
+        const confFiles=await(await fetch(`${API}/tasks/?limit=100`)).json();
+        /* Just include the raw report data */
+      }catch(e){}
+    }
+
+    /* ADC SMILES */
+    const adcResp=await fetch(`${API}/report/generate`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({target_name:'HER2',job_prefix:'her2_tier1_v2',include_rag:false}),
+    });
+    if(adcResp.ok){
+      const d=await adcResp.json();
+      zip.file('report_data.json',JSON.stringify(d.data,null,2));
+      zip.file('report.md',d.report_markdown||'');
+    }
+
+    const blob=await zip.generateAsync({type:'blob'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=`OIH_HER2_RawData_${Date.now()}.zip`;
+    a.click();URL.revokeObjectURL(url);
+  }catch(e){console.error('Zip error:',e)}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
 /*  MAIN APP                                                                  */
 /* ══════════════════════════════════════════════════════════════════════════ */
 function App(){
@@ -734,6 +897,7 @@ function App(){
   const[tasks,setTasks]=useState([]);
   const[health,setHealth]=useState(null);
   const[loading,setLoading]=useState(false);
+  const[showReport,setShowReport]=useState(false);
   const[activeTab,setActiveTab]=useState('chat');
   const[chat,setChat]=useState([]);
   const[chatInput,setChatInput]=useState('');
@@ -2044,6 +2208,13 @@ function App(){
 
           <div className="flex-1"/>
 
+          {/* Export Report */}
+          <button onClick={()=>setShowReport(true)}
+            className="px-3 py-1.5 text-xs font-mono rounded-lg border border-border text-[#a0aec0]
+              hover:border-cyan/40 hover:text-cyan transition-all flex items-center gap-1.5">
+            <span>📄</span> Export Report
+          </button>
+
           {/* GPU dot */}
           <GpuDot health={health}/>
         </div>
@@ -2197,6 +2368,7 @@ function App(){
         </>}
         <span className="text-[#94a3b8]">192.168.31.23 | Qwen3-14B + 18 Tools</span>
       </footer>
+      <ExportReportModal show={showReport} onClose={()=>setShowReport(false)}/>
     </div>
   );
 }

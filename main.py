@@ -23,6 +23,7 @@ from routers import (
     system,
     analysis,
     immunology,
+    report,
 )
 from core.task_manager import task_manager
 from core.config import settings
@@ -66,6 +67,7 @@ app.include_router(analysis.router,            prefix="/api/v1/analysis",     ta
 app.include_router(immunology.router,          prefix="/api/v1/immunology",   tags=["Immunology"])
 app.include_router(agent_router,               prefix="/api/v1/agent",        tags=["AI Agent"])
 app.include_router(rag_router,                 prefix="/api/v1/rag",          tags=["Literature RAG"])
+app.include_router(report.router,              prefix="/api/v1/report",       tags=["Report Generation"])
 
 # Serve output files (PDB/CIF/SDF etc.) for dashboard 3D viewer
 app.mount("/outputs", StaticFiles(directory="/data/oih/outputs"), name="outputs")
