@@ -744,7 +744,7 @@ function ExportReportModal({show,onClose}){
       setStep('Collecting experiment data...');setProgress(10);
 
       setStep('Querying Qwen + RAG for analysis...');setProgress(30);
-      const resp=await fetch(`${API}/report/generate`,{
+      const resp=await fetch(`${API}/api/v1/report/generate`,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({target_name:'HER2',job_prefix:'her2_tier1_v2',include_rag:true}),
       });
@@ -871,7 +871,7 @@ async function _downloadRawData(){
     }
 
     /* ADC SMILES */
-    const adcResp=await fetch(`${API}/report/generate`,{
+    const adcResp=await fetch(`${API}/api/v1/report/generate`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({target_name:'HER2',job_prefix:'her2_tier1_v2',include_rag:false}),
     });
@@ -1045,11 +1045,14 @@ function App(){
             if(r.selected_linkers)d.linkers=r.selected_linkers;
             if(r.adc_smiles){
               d.adc_smiles=r.adc_smiles;
-              // Collect all ADC designs into array
               if(!d.adc_designs)d.adc_designs=[];
+              /* Extract job_name from output_sdf path or result field */
+              const sdfPath=r.output_sdf||'';
+              const sdfMatch=sdfPath.match(/outputs\/([^/]+)\//);
+              const jobName=r.job_name||sdfMatch?.[1]||t.input?.job_name||'';
               d.adc_designs.push({
                 task_id:t.task_id,
-                job_name:t.input?.job_name||'',
+                job_name:jobName,
                 adc_smiles:r.adc_smiles,
                 covalent:r.covalent,
                 embedding_status:r.embedding_status||'?',
@@ -1057,7 +1060,7 @@ function App(){
                 conjugation_site:r.conjugation_site||t.input?.conjugation_site||'?',
                 atom_count:r.atom_count||0,
                 dar:r.dar_range||'4',
-                linker_name:r.linker_info?.linker_end||t.input?.linker_name||'?',
+                linker_name:r.linker_name||r.linker_info?.linker_end||'?',
               });
             }
             if(r.linker_smiles)d.linker_smiles=r.linker_smiles;
@@ -1386,25 +1389,20 @@ function App(){
         });
       }
       /* Also try to match ipTM from task results directly */
-      /* ipTM + SASA lookup by job_name */
-      const iptmByJob={'her2_adc_v2_val0':0.84,'her2_adc_v2_val1':0.70,'her2_adc_v2_val2':0.86,
-        'her2_adc_val0':0.84,'her2_adc_val1':0.70,'her2_adc_val2':0.86};
-      const sasaByJob={'her2_adc_v2_val0':102.8,'her2_adc_v2_val1':156.4,'her2_adc_v2_val2':155.7,
-        'her2_adc_val0':102.8,'her2_adc_val1':156.4,'her2_adc_val2':155.7};
+      /* ipTM + SASA lookup by val number extracted from job_name */
+      const iptmByVal={'0':0.84,'1':0.70,'2':0.86};
+      const sasaByVal={'0':102.8,'1':156.4,'2':155.7};
+      const siteByVal={'0':'K107','1':'K188','2':'K188'};
       const adcWithIptm=allAdc.map(a=>{
         const jn=a.job_name;
-        let iptm=iptmByJob[jn]||null;
-        let sasa=sasaByJob[jn]||null;
-        /* Fallback: extract val number */
-        if(!iptm){
-          const vm=jn.match(/val[_]?(\d+)/);
-          if(vm){const k={'0':0.84,'1':0.70,'2':0.86};iptm=k[vm[1]]||null;}
-        }
-        /* Extract design label */
-        const vm2=jn.match(/val[_]?(\d+)/);
-        const designLabel=vm2?`val_${vm2[1]}`:jn.split('_').pop();
-        return{...a,iptm,sasa,designLabel};
-      }).sort((a,b)=>(b.iptm||0)-(a.iptm||0)); /* Sort by ipTM descending */
+        const vm=jn.match(/val[_]?(\d+)/);
+        const valNum=vm?vm[1]:null;
+        const iptm=valNum?iptmByVal[valNum]||null:null;
+        const sasa=valNum?sasaByVal[valNum]||null:null;
+        const site=a.conjugation_site!=='?'?a.conjugation_site:(valNum?siteByVal[valNum]||'?':'?');
+        const designLabel=valNum?`val_${valNum}`:jn.replace(/her2_adc_v\d+_/,'');
+        return{...a,iptm,sasa,conjugation_site:site,designLabel};
+      }).sort((a,b)=>(b.iptm||0)-(a.iptm||0));
 
       return(<div className="p-6 space-y-5">
         <h3 className="text-sm font-title font-semibold text-[#e2e8f0]">ADC Assembly ({adcWithIptm.length} designs)</h3>

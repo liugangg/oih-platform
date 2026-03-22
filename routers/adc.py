@@ -634,6 +634,9 @@ async def rdkit_conjugate(req: RDKitConjugateRequest):
             "output_sdf": sdf_path,
             "embedding_status": embedding_status,
             "atom_count": atom_count,
+            "conjugation_site": req.conjugation_site,
+            "job_name": req.job_name,
+            "linker_name": req.linker_name,
             "warnings": warnings,
         }
 
