@@ -92,6 +92,8 @@ async def predict_alphafold3(req: AlphaFold3Request):
             "--model_dir=/data/alphafold3_models",
             "--db_dir=/data/alphafold3_db",
             "--flash_attention_implementation=triton",
+            "--jackhmmer_n_cpu=32",
+            "--nhmmer_n_cpu=32",
             # num_seeds already set in JSON via modelSeeds
         ]
         # run_relaxation not supported in this AF3 version
