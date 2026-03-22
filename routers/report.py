@@ -5,6 +5,7 @@ Collects experiment data, queries Qwen for analysis, returns markdown report
 import json
 import glob
 import os
+import re
 import logging
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -68,6 +69,9 @@ async def _collect_project_data(job_prefix: str) -> dict:
         "pipeline_results": [],
     }
 
+    # Derive target keyword from prefix (e.g. "her2_tier1_v2" → "her2")
+    target_kw = job_prefix.split("_")[0].lower() if job_prefix else ""
+
     for f in glob.glob(os.path.join(tasks_dir, "*.json")):
         try:
             task = json.load(open(f))
@@ -75,8 +79,12 @@ async def _collect_project_data(job_prefix: str) -> dict:
                 continue
             result = task.get("result") or {}
             output_dir = result.get("output_dir", "")
+            output_sdf = result.get("output_sdf", "")
+            input_job = task.get("input", {}).get("job_name", "")
 
-            if job_prefix not in output_dir and job_prefix not in task.get("input", {}).get("job_name", ""):
+            # Match by: exact prefix in paths, or target keyword in any path
+            searchable = f"{output_dir} {output_sdf} {input_job} {result.get('job_name', '')}".lower()
+            if job_prefix and job_prefix.lower() not in searchable and target_kw not in searchable:
                 continue
 
             tool = task.get("tool", "")
@@ -98,8 +106,14 @@ async def _collect_project_data(job_prefix: str) -> dict:
                 })
 
             elif tool == "rdkit_conjugate":
+                # Extract job_name from result or output_sdf path
+                adc_job = result.get("job_name") or ""
+                if not adc_job and output_sdf:
+                    m = re.search(r'outputs/([^/]+)/', output_sdf)
+                    if m: adc_job = m.group(1)
                 data["adc_results"].append({
-                    "job_name": task.get("input", {}).get("job_name", "?"),
+                    "job_name": adc_job,
+                    "conjugation_site": result.get("conjugation_site", "?"),
                     "adc_smiles": result.get("adc_smiles", "")[:100],
                     "covalent": result.get("covalent", False),
                     "reaction_type": result.get("reaction_type_used", "?"),
