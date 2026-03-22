@@ -62,8 +62,40 @@ def detect_skills(user_message: str) -> List[str]:
     return [skill for skill, keywords in KEYWORD_SKILL_MAP.items()
             if any(kw in msg for kw in keywords)]
 
+# When a pipeline-level task is detected, auto-inject all related skills
+# so Qwen has complete decision context (not just keyword-matched subset)
+PIPELINE_SKILL_BUNDLES = {
+    # binder/ADC design → needs ALL of these to make correct decisions
+    "binder_design": {
+        "triggers": ["binder", "nanobody", "antibody", "抗体", "纳米抗体",
+                      "结合蛋白", "adc", "ADC", "偶联", "drug conjugate",
+                      "设计.*binder", "design.*binder"],
+        "skills": ["tool_scope", "alphafold3", "rfdiffusion", "proteinmpnn",
+                   "discotope3", "igfold", "adc", "bindcraft"],
+    },
+    # drug discovery → full stack
+    "drug_discovery": {
+        "triggers": ["drug discovery", "药物发现", "靶点.*设计", "pipeline",
+                      "端到端", "end.to.end"],
+        "skills": ["tool_scope", "alphafold3", "rfdiffusion", "proteinmpnn",
+                   "discotope3", "adc", "fpocket", "esm"],
+    },
+}
+
+
 def build_dynamic_system_prompt(base_prompt: str, user_message: str) -> Tuple[str, List[str]]:
     detected = detect_skills(user_message)
+
+    # Pipeline-aware injection: if a pipeline task is detected,
+    # add all related skills that Qwen needs for correct decision-making
+    msg_lower = user_message.lower()
+    for bundle_name, bundle in PIPELINE_SKILL_BUNDLES.items():
+        import re as _re
+        if any(_re.search(t, msg_lower) for t in bundle["triggers"]):
+            for skill in bundle["skills"]:
+                if skill not in detected:
+                    detected.append(skill)
+
     sections = []
     for name in detected:
         content = load_skill(name)
