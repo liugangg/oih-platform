@@ -568,16 +568,25 @@ async def rdkit_conjugate(req: RDKitConjugateRequest):
         task.progress_msg = "Generating 3D coordinates..."
 
         mol_3d = Chem.AddHs(final_mol)
-        embed_result = AllChem.EmbedMolecule(mol_3d, AllChem.ETKDGv3())
-        if embed_result != 0:
-            # Try with random coords fallback
-            embed_result = AllChem.EmbedMolecule(
-                mol_3d, AllChem.ETKDGv3(), useRandomCoords=True
-            )
-        if embed_result == 0:
-            AllChem.MMFFOptimizeMolecule(mol_3d, maxIters=500)
-        else:
-            warnings.append("3D embedding failed; SDF will lack 3D coordinates")
+        embedding_status = "3d"
+        try:
+            params = AllChem.ETKDGv3()
+            embed_result = AllChem.EmbedMolecule(mol_3d, params)
+            if embed_result != 0:
+                # Retry with random coordinates (for large/complex molecules)
+                params.useRandomCoords = True
+                embed_result = AllChem.EmbedMolecule(mol_3d, params)
+            if embed_result == 0:
+                try:
+                    AllChem.MMFFOptimizeMolecule(mol_3d, maxIters=500)
+                except Exception:
+                    warnings.append("MMFF optimization failed; using unoptimized 3D coords")
+            else:
+                embedding_status = "2d_only"
+                warnings.append("3D embedding failed (large ADC molecule); returning 2D SMILES only")
+        except Exception as embed_err:
+            embedding_status = "2d_only"
+            warnings.append(f"3D embedding error: {embed_err}; returning 2D SMILES only")
 
         mol_3d = Chem.RemoveHs(mol_3d)
         atom_count = mol_3d.GetNumAtoms()
@@ -613,6 +622,7 @@ async def rdkit_conjugate(req: RDKitConjugateRequest):
                 "note": entry["note"],
             },
             "output_sdf": sdf_path,
+            "embedding_status": embedding_status,
             "atom_count": atom_count,
             "warnings": warnings,
         }

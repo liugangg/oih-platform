@@ -9,6 +9,8 @@ Tools: AlphaFold3
 #   - 修复 1**：新增 `_wait_for_af3_task()` 无限等待函数，每 30s poll，仅在 OOM/exit1/cancelled/连续10次同错 时判定失败
 #   - 不再降级到 DEGRADED 导致 OOM crash
 #   - 原因**：CIF→PDB 转换失败时 `af3_pdb=None` → `"No PDB for FreeSASA"` 错误
+#   - AF3 验证时按结构域截取抗原序列，避免全长序列降低ipTM精度
+#   - `num_seeds=3` 用于 binder_design_pipeline AF3 验证（速度/准确性平衡）
 # --- /SYNC_NOTES ---
 
 import json
