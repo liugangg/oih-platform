@@ -1252,8 +1252,24 @@ function App(){
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${adcEmbed==='3d'?'bg-ok/10 text-ok':'bg-warn/10 text-warn'}`}>
                 {adcEmbed==='3d'?'3D structure':'2D only'}
               </span>
+              {rd.adc_smiles.includes('.')&&(
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-warn/10 text-warn">
+                  mixture (dot-disconnected)
+                </span>
+              )}
             </div>
-            <Mol2D smiles={rd.adc_smiles} w={500} h={220} label="ADC Conjugate"/>
+            {rd.adc_smiles.includes('.')?(
+              <div className="flex items-center gap-4 flex-wrap">
+                {rd.adc_smiles.split('.').map((frag,fi)=>(
+                  <div key={fi} className="text-center">
+                    <Mol2D smiles={frag} w={240} h={150}/>
+                    <p className="text-[10px] text-[#94a3b8] font-mono mt-1">Fragment {fi+1}</p>
+                  </div>
+                ))}
+              </div>
+            ):(
+              <Mol2D smiles={rd.adc_smiles} w={500} h={220} label="ADC Conjugate"/>
+            )}
             <p className="text-[10px] text-[#94a3b8] font-mono mt-2 break-all max-w-2xl">{rd.adc_smiles}</p>
           </div>
         )}
