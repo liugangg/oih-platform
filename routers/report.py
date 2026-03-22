@@ -192,20 +192,27 @@ async def generate_report(req: ReportRequest):
     try:
         import httpx
         from core.config import settings
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=300) as client:
             resp = await client.post(
                 f"http://{settings.SERVER_HOST}:8002/v1/chat/completions",
                 json={
                     "model": "Qwen3-14B",
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 4096,
+                    "max_tokens": 8192,
                     "temperature": 0.3,
+                    "chat_template_kwargs": {"enable_thinking": False},
                 },
             )
             if resp.status_code == 200:
                 choices = resp.json().get("choices", [])
                 if choices:
-                    report_md = choices[0].get("message", {}).get("content", "")
+                    msg = choices[0].get("message", {})
+                    # Qwen3 may return content in 'content' or 'reasoning' field
+                    report_md = msg.get("content") or msg.get("reasoning") or ""
+                    # Strip thinking tags if present
+                    if "<think>" in report_md:
+                        import re as _re
+                        report_md = _re.sub(r'<think>.*?</think>', '', report_md, flags=_re.DOTALL).strip()
     except Exception as e:
         logger.warning("Qwen report generation failed: %s", e)
         report_md = f"# Report Generation Failed\n\nError: {e}\n\n## Raw Data\n```json\n{json.dumps(project_data, indent=2)[:5000]}\n```"
