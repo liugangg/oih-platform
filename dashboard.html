@@ -755,7 +755,7 @@ function ExportReportModal({show,onClose}){
       setStep('Report generated');setProgress(70);
 
       setStep('Generating PDF...');setProgress(80);
-      await _generatePDF(md,result.data);
+      await _generatePDF(md,result.data,result.charts||{});
       setStep('Done!');setProgress(100);
     }catch(e){
       setError(e.message);setStep('Failed');
@@ -806,7 +806,7 @@ function ExportReportModal({show,onClose}){
   );
 }
 
-async function _generatePDF(md,data){
+async function _generatePDF(md,data,charts){
   if(typeof jspdf==='undefined'&&typeof window.jspdf==='undefined')return;
   const{jsPDF}=window.jspdf;
   const pdf=new jsPDF('p','mm','a4');
@@ -837,18 +837,17 @@ async function _generatePDF(md,data){
     }else{y+=3}
   });
 
-  /* Chart screenshots */
-  try{
-    const chartEls=document.querySelectorAll('.mol3d, canvas');
-    for(const el of Array.from(chartEls).slice(0,3)){
-      try{
-        const canvas=await html2canvas(el,{backgroundColor:'#0f1117',scale:2});
-        pdf.addPage();
-        const imgData=canvas.toDataURL('image/png');
-        pdf.addImage(imgData,'PNG',10,10,190,100);
-      }catch(e){}
+  /* Server-side charts (base64 PNG from matplotlib) */
+  if(charts){
+    const chartLabels={iptm_chart:'AF3 ipTM Scores',sasa_chart:'Conjugation Site SASA',adc_mol_0:'ADC Conjugate #1',adc_mol_1:'ADC Conjugate #2',adc_mol_2:'ADC Conjugate #3'};
+    for(const[key,b64] of Object.entries(charts)){
+      if(!b64)continue;
+      pdf.addPage();
+      pdf.setFontSize(12);pdf.setFont('helvetica','bold');
+      pdf.text(chartLabels[key]||key,20,15);
+      try{pdf.addImage('data:image/png;base64,'+b64,'PNG',10,20,190,110)}catch(e){}
     }
-  }catch(e){}
+  }
 
   pdf.save(`OIH_HER2_Report_${Date.now()}.pdf`);
 }
