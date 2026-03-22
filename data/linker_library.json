@@ -442,6 +442,58 @@
       "stability_plasma": "very_high",
       "bystander_effect": true,
       "notes": "Val-Cit改良版，用cyclobutane氨基酸替换Val，对鼠血浆carboxylesterase 1C（Ces1C）稳定，解决VC在鼠模型不稳定问题"
+    },
+
+    {
+      "id": "nhs-peg4-noncleavable",
+      "name": "NHS-PEG4",
+      "full_name": "NHS-PEG4 non-cleavable amine linker",
+      "smiles": "O=C(ON1C(=O)CCC1=O)CCOCCOCCOCCOCCNC(=O)",
+      "antibody_end": "NHS_ester",
+      "payload_end": "amine",
+      "reaction_type": "nhs_amine",
+      "conjugation_site": "lysine",
+      "cleavable": false,
+      "cleavage_mechanism": "none",
+      "cleavage_condition": "non_cleavable",
+      "dar_range": "2-4",
+      "dar_note": "Surface-exposed Lys residues, DAR controlled by NHS:Ab molar ratio",
+      "hydrophilicity": "high",
+      "stability": "Very stable in plasma; PEG4 spacer improves pharmacokinetics",
+      "chemistry_cn": "NHS酯与Lys侧链ε-氨基反应形成稳定酰胺键",
+      "linker_end": "NHS酯",
+      "payload_end_cn": "氨基",
+      "approved_adcs": ["Kadcyla (T-DM1, 类似NHS-Lys策略)"],
+      "compatible_payloads": ["MMAE", "DM1", "DXd", "SN-38"],
+      "stability_plasma": "very_high",
+      "bystander_effect": false,
+      "notes": "NHS酯与抗体表面Lys反应，PEG4增加亲水性。适用于无游离Cys的binder设计。DAR=2-4可通过控制NHS:Ab比例调节。T-DM1 (Kadcyla) 使用类似Lys偶联策略。"
+    },
+
+    {
+      "id": "nhs-peg2-vc-pabc",
+      "name": "NHS-PEG2-Val-Cit-PABC",
+      "full_name": "NHS-PEG2-Valine-Citrulline-PABC cleavable amine linker",
+      "smiles": "O=C(ON1C(=O)CCC1=O)CCOCCOCCNC(=O)C(CC(C)C)NC(=O)C(CCCNC(=N)N)NC(=O)NCc1ccc(OC(=O)O)cc1",
+      "antibody_end": "NHS_ester",
+      "payload_end": "PABC_carbamate",
+      "reaction_type": "nhs_amine",
+      "conjugation_site": "lysine",
+      "cleavable": true,
+      "cleavage_mechanism": "cathepsin_B",
+      "cleavage_condition": "lysosome",
+      "dar_range": "2-4",
+      "dar_note": "Lys conjugation with cleavable Val-Cit dipeptide",
+      "hydrophilicity": "high",
+      "stability": "High plasma stability; PEG2 + Val-Cit cleavage in tumor lysosomes",
+      "chemistry_cn": "NHS-Lys偶联 + Val-Cit被cathepsin B裂解 + PABC自裂解释放payload",
+      "linker_end": "NHS酯",
+      "payload_end_cn": "PABC氨基甲酸酯",
+      "approved_adcs": [],
+      "compatible_payloads": ["MMAE", "MMAF", "auristatin"],
+      "stability_plasma": "high",
+      "bystander_effect": true,
+      "notes": "结合NHS-Lys偶联（无需Cys工程）和Val-Cit可裂解机制。适用于de novo设计binder无游离Cys的场景。PEG2提供亲水性平衡。cathepsin B在肿瘤溶酶体中高表达。"
     }
 
   ]
