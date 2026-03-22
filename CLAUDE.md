@@ -189,7 +189,7 @@ gmx mdrun -nb cpu -pme cpu -ntmpi 1 -ntomp 32
 | Queue | Semaphore | Tools |
 |-------|-----------|-------|
 | CPU queue | `Semaphore(8)` | fpocket, P2Rank, Chemprop |
-| GPU queue | `Semaphore(3)` | GNINA, AutoDock, AF3, BindCraft, DiffDock, RFdiffusion, GROMACS, ESM2 |
+| GPU queue | `Semaphore(1)` | GNINA, AutoDock, AF3, BindCraft, DiffDock, RFdiffusion, GROMACS, ESM2 — one at a time to prevent OOM |
 | Degraded queue | `Semaphore(4)` | Auto-fallback to CPU+RAM when GPU VRAM insufficient |
 
 VRAM estimates: AF3=20GB, BindCraft=16GB, DiffDock/RFdiffusion=8GB, GROMACS=6GB, ESM=6GB, GNINA=4GB, ProteinMPNN=4GB, AutoDock=2GB

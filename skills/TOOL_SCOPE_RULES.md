@@ -49,7 +49,17 @@ DiscoTope3 + IEDB + RAG → known_epitope_override → RFdiffusion → ProteinMP
 ... → ProteinMPNN → ESM2 perplexity 过滤(top 10) → AF3 直接验证
 ```
 
-## 历史教训（2026-03-22）
+## 验证结果（2026-03-22）
+
+### HER2 Tier 1 + de_novo + Domain 截取
+- extract_interface_residues → C558-C573 (Domain IV) → RFdiffusion → AF3
+- val_0: ipTM=0.84 (全长1015aa), val_2: ipTM=**0.86** (Domain4 202aa)
+- **Domain 截取比全长更优** — AF3 对短序列复合物更准确
+- 3/3 通过 ipTM≥0.6 (100% 通过率)
+
+### 历史教训
 - IgFold 误用于 de novo binder → pLDDT 全部 0.4-12.6 → 0 个候选进入 AF3
 - 根因：IgFold 使用 AntiBERTy，只在抗体数据集上训练
 - 修复：pipeline 加入 binder_type 参数，de_novo 时跳过 IgFold
+- FreeSASA 不接受 CIF → 需先转 PDB
+- GPU Semaphore 必须=1，否则两个大模型并发 OOM
