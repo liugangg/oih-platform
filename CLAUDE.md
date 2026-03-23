@@ -825,3 +825,16 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 - PDB 包含 chain A (CD36) + chain B (PfEMP1 malaria protein)
 - pipeline 必须指定 `chains="A"` 过滤，否则 DiscoTope3 报 "No valid PDB"
 - CD36 残基范围: 35-434 (400 residues)
+
+### PeSTo PPI Interface Prediction (deployed 2026-03-23)
+- Replaces P2Rank + DiscoTope3 in binder design scoring
+- ROC AUC 0.92 (vs MaSIF-site 0.80)
+- Deployed in oih-proteinmpnn container: /app/pesto/
+- Must extract target single chain for complex PDBs
+- PPI-optimized scoring: rag(0.30)+pesto(0.25)+conservation(0.20)+sasa(0.10)+electrostatics(0.15)
+
+### Key finding: B-cell epitope ≠ PPI interface
+- DiscoTope3 predicts immunogenicity, not optimal binder sites
+- CD36 proof: DiscoTope3 A397-400 → 0/10 pass; PeSTo A187-194 → testing
+- Baker lab never used epitope tools for hotspot selection
+- RAG-first: literature PPI interfaces always override computational epitope predictions
