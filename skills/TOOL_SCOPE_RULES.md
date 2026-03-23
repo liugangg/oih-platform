@@ -57,6 +57,18 @@ DiscoTope3 + IEDB + RAG → known_epitope_override → RFdiffusion → ProteinMP
 - **Domain 截取比全长更优** — AF3 对短序列复合物更准确
 - 3/3 通过 ipTM≥0.6 (100% 通过率)
 
+## RAG 优先级规则（所有靶点通用）
+
+**PPI interface > epitope prediction**
+
+当 RAG 返回已知蛋白-蛋白相互作用界面（共晶结构、突变验证的结合残基）时，
+必须优先使用这些残基做 hotspot，覆盖 DiscoTope3/IEDB 的表位预测。
+
+- B 细胞表位预测的是免疫原性，不是最佳 binder 设计位点
+- PPI 界面残基是实验验证的蛋白结合位点，直接适用于 binder 设计
+- RAG 搜索分两层：Layer 1 (PPI共晶/突变) → Layer 2 (epitope fallback)
+- CD36 教训：DiscoTope3 选了表面暴露残基 A397/A400，但应该用 CLESH domain (93-120)
+
 ### 历史教训
 - IgFold 误用于 de novo binder → pLDDT 全部 0.4-12.6 → 0 个候选进入 AF3
 - 根因：IgFold 使用 AntiBERTy，只在抗体数据集上训练
