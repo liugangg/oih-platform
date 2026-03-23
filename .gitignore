@@ -15,7 +15,7 @@ build/
 
 # Runtime data (never publish)
 data/tasks/
-data/distillation/
+# data/distillation/ — tracked (distillation training data for LoRA)
 outputs/
 logs/
 *.log
