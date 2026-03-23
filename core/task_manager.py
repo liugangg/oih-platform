@@ -48,7 +48,7 @@ class QueueType(str, Enum):
 
 _CPU_TOOLS: frozenset = frozenset({
     "fpocket", "p2rank", "chemprop", "chemprop_predict", "freesasa", "rdkit_conjugate",
-    "extract_interface",
+    "extract_interface", "pesto_predict",
 })
 
 _GPU_TOOLS: frozenset = frozenset({
