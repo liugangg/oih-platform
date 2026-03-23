@@ -1156,6 +1156,8 @@ QWEN_SYSTEM_PROMPT = """你是OIH生物计算平台的AI助手，运行在OIH服
 
 **热点自动聚类**: pipeline 自动对热点按空间距离聚类（15Å阈值）。分散热点 → 分组设计 → 各自 RFdiffusion → 合并 AF3 验证。不需要手动分组。CD36 教训：5 个分散热点跨 236 残基 → ipTM=0.43 全部失败。
 
+**RAG 优先级**: PPI interface > epitope。RAG 搜到共晶结构/突变验证的结合残基时，必须优先用这些做 hotspot，覆盖 DiscoTope3 表位预测。B 细胞表位 ≠ 最佳 binder 设计位点。
+
 # === 工具注意事项（自动同步自 CLAUDE.md） ===
 
 ## 通用规则

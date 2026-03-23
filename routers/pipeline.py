@@ -682,19 +682,31 @@ async def _rag_search_pocket_context(target_name: str, pdb_id: str) -> dict:
 
     Returns: {text: str, residues: list[str], domains: list[str], kd_values: list[str]}
     """
-    queries = [
-        f"{target_name} antibody nanobody binding interface residues epitope",
-        f"{target_name} {pdb_id} crystal structure complex co-crystal known ligand",
-        f"{target_name} domain binding site mutagenesis functional residues interaction partner",
+    # Layer 1: PPI interfaces + co-crystal + mutagenesis (highest priority)
+    # These give experimentally validated binding residues — far more reliable
+    # than epitope predictions for binder design.
+    primary_queries = [
+        f"{target_name} protein-protein interaction co-crystal structure complex",
+        f"{target_name} known ligand binding partner domain interaction residues",
+        f"{target_name} receptor ligand interface mutagenesis",
     ]
-    result = {"text": "", "residues": [], "domains": [], "kd_values": []}
+    # Layer 2 (fallback only if Layer 1 finds no residues): epitope/antibody
+    fallback_queries = [
+        f"{target_name} epitope antibody binding site",
+        f"{target_name} {pdb_id} binding site experimental validation",
+    ]
+
+    result = {"text": "", "residues": [], "domains": [], "kd_values": [],
+              "rag_layer": None}
 
     all_papers = []
     try:
         from retrieval.rag_router import get_retriever
         retriever = get_retriever()
         seen_titles = set()
-        for query in queries:
+
+        # Layer 1: PPI interfaces
+        for query in primary_queries:
             try:
                 papers_obj = await retriever.retrieve(
                     query, n_pubmed=4, n_biorxiv=2, n_local=3, years_back=5,
@@ -707,6 +719,36 @@ async def _rag_search_pocket_context(target_name: str, pdb_id: str) -> dict:
                         all_papers.append(pd)
             except Exception:
                 continue
+
+        # Check if Layer 1 found usable residues
+        if all_papers:
+            combined_l1 = " ".join(
+                (p.get("abstract", "") or p.get("text", "")) for p in all_papers
+            )
+            l1_residues = _extract_residue_numbers_from_text(combined_l1)
+            if l1_residues:
+                result["rag_layer"] = "ppi_interface"
+                logger.info("[RAG] Layer 1 (PPI): %d papers, %d residues found",
+                            len(all_papers), len(l1_residues))
+
+        # Layer 2 fallback: only if Layer 1 found no residues
+        if not result.get("rag_layer"):
+            for query in fallback_queries:
+                try:
+                    papers_obj = await retriever.retrieve(
+                        query, n_pubmed=4, n_biorxiv=2, n_local=3, years_back=5,
+                    )
+                    for p in (papers_obj or []):
+                        pd = p.to_dict()
+                        title = pd.get("title", "")
+                        if title not in seen_titles:
+                            seen_titles.add(title)
+                            all_papers.append(pd)
+                except Exception:
+                    continue
+            result["rag_layer"] = "epitope_fallback"
+            logger.info("[RAG] Layer 2 (epitope fallback): %d total papers", len(all_papers))
+
     except Exception as e:
         logger.warning("[pocket_scoring] RAG search failed: %s", e)
         return result
