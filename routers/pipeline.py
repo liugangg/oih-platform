@@ -479,6 +479,86 @@ def _cluster_hotspots(residue_keys: list[str], pdb_path: str, max_dist: float = 
     return clustered
 
 
+def _multi_cluster_hotspots(residue_keys: list, pdb_path: str,
+                            distance_threshold: float = 15.0, max_per_cluster: int = 5) -> list:
+    """Split hotspot residues into multiple spatial clusters.
+
+    Uses greedy agglomerative clustering: residues within distance_threshold
+    of any member are joined. Returns list of clusters, each a list of residue keys.
+    Single-residue clusters are merged into the nearest valid cluster.
+
+    Example: [['A164','A166'], ['A397','A398','A400']]
+    """
+    if not residue_keys or len(residue_keys) <= 3:
+        return [residue_keys]
+
+    # Parse CA coordinates from PDB
+    ca_coords = {}
+    try:
+        with open(pdb_path) as f:
+            res_set = set(residue_keys)
+            for line in f:
+                if line.startswith("ATOM") and line[12:16].strip() == "CA":
+                    chain = line[21]
+                    resnum = line[22:27].strip()
+                    key = f"{chain}{resnum}"
+                    if key in res_set:
+                        ca_coords[key] = (float(line[30:38]), float(line[38:46]), float(line[46:54]))
+    except Exception:
+        return [residue_keys]
+
+    if len(ca_coords) < 2:
+        return [residue_keys]
+
+    def _dist(a, b):
+        return sum((ai - bi) ** 2 for ai, bi in zip(a, b)) ** 0.5
+
+    # Greedy clustering: seed from first unassigned, grow by distance
+    keys = list(ca_coords.keys())
+    used = set()
+    clusters = []
+
+    for seed in keys:
+        if seed in used:
+            continue
+        cluster = [seed]
+        used.add(seed)
+        # Expand: add any unassigned residue within threshold of ANY cluster member
+        changed = True
+        while changed:
+            changed = False
+            for other in keys:
+                if other in used:
+                    continue
+                if any(_dist(ca_coords[other], ca_coords[m]) <= distance_threshold for m in cluster):
+                    cluster.append(other)
+                    used.add(other)
+                    changed = True
+        clusters.append(cluster[:max_per_cluster])
+
+    # Merge single-residue clusters into nearest valid cluster
+    valid = [c for c in clusters if len(c) >= 2]
+    singles = [c[0] for c in clusters if len(c) == 1]
+    if singles and valid:
+        for s in singles:
+            # Find nearest valid cluster
+            best_idx, best_dist = 0, float('inf')
+            for ci, cl in enumerate(valid):
+                for m in cl:
+                    d = _dist(ca_coords.get(s, (0, 0, 0)), ca_coords.get(m, (0, 0, 0)))
+                    if d < best_dist:
+                        best_dist = d
+                        best_idx = ci
+            if len(valid[best_idx]) < max_per_cluster:
+                valid[best_idx].append(s)
+    elif singles:
+        valid = [singles[:max_per_cluster]]
+
+    logger.info("_multi_cluster_hotspots: %d residues → %d clusters: %s",
+                len(residue_keys), len(valid), [len(c) for c in valid])
+    return valid if valid else [residue_keys[:max_per_cluster]]
+
+
 def _compute_epitope_score_for_pocket(
     epitope_residues: list[dict],
     pocket_residues: list[str],
@@ -2485,57 +2565,83 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
             results["steps"]["diffdock"] = {"status": "skipped"}
             results["diffdock_reference"] = None
 
-        # ── Step 8a+8b: RFdiffusion + BindCraft (parallel) ────────────────
+        # ── Step 8a+8b: RFdiffusion + BindCraft (with auto-clustering) ────
         task.progress = 22
-        hotspot_str = ",".join(hotspot_residues)
-        task.progress_msg = f"Step 8/16: RFdiffusion + BindCraft parallel (hotspots: {hotspot_str})..."
         from routers.protein_design import run_rfdiffusion, run_proteinmpnn
 
-        # 8a: Launch RFdiffusion
-        rfd_ref = await run_rfdiffusion(RFdiffusionRequest(
-            job_name=f"{req.job_name}_rfd",
-            mode="binder_design",
-            target_pdb=target_pdb,
-            hotspot_residues=hotspot_str,
-            num_designs=req.num_rfdiffusion_designs,
-        ))
+        # Auto-cluster hotspots by spatial proximity
+        hotspot_clusters = _multi_cluster_hotspots(hotspot_residues, target_pdb, distance_threshold=15.0)
+        results["hotspot_clusters"] = hotspot_clusters
+        n_clusters = len(hotspot_clusters)
 
-        # 8b: Launch BindCraft in parallel (non-blocking)
+        if n_clusters > 1:
+            logger.info("[pocket_guided] Hotspots split into %d clusters: %s", n_clusters, hotspot_clusters)
+            task.progress_msg = f"Step 8/16: {n_clusters} epitope clusters → designing separately..."
+        else:
+            hotspot_str = ",".join(hotspot_residues)
+            task.progress_msg = f"Step 8/16: RFdiffusion + BindCraft parallel (hotspots: {hotspot_str})..."
+
+        # 8a: Launch RFdiffusion per cluster
+        rfd_refs = []
+        designs_per_cluster = max(3, req.num_rfdiffusion_designs // n_clusters)
+        for ci, cluster in enumerate(hotspot_clusters):
+            cluster_str = ",".join(cluster)
+            suffix = f"_c{ci}" if n_clusters > 1 else ""
+            rfd_ref = await run_rfdiffusion(RFdiffusionRequest(
+                job_name=f"{req.job_name}_rfd{suffix}",
+                mode="binder_design",
+                target_pdb=target_pdb,
+                hotspot_residues=cluster_str,
+                num_designs=designs_per_cluster,
+            ))
+            rfd_refs.append((ci, cluster_str, rfd_ref))
+            logger.info("[pocket_guided] RFdiffusion cluster %d: %s (%d designs)",
+                        ci, cluster_str, designs_per_cluster)
+
+        # 8b: Launch BindCraft on first (largest) cluster
         bindcraft_ref = None
         bindcraft_result = None
         try:
             from routers.protein_design import run_bindcraft
             from schemas.models import BindCraftRequest
+            bc_hotspots = ",".join(hotspot_clusters[0])
             bindcraft_ref = await run_bindcraft(BindCraftRequest(
                 job_name=f"{req.job_name}_bindcraft",
                 target_pdb=target_pdb,
-                target_hotspots=hotspot_str,
+                target_hotspots=bc_hotspots,
                 num_designs=10,
             ))
-            logger.info("[pocket_guided] BindCraft launched: %s", bindcraft_ref.task_id)
+            logger.info("[pocket_guided] BindCraft launched: %s (cluster 0)", bindcraft_ref.task_id)
         except Exception as e:
             logger.warning("[pocket_guided] BindCraft launch failed (non-fatal): %s", e)
             results["steps"]["bindcraft"] = {"status": "failed", "error": str(e)}
 
-        # Wait for RFdiffusion — recover partial results on timeout/failure
-        try:
-            rfd_result = await _wait_for_task(rfd_ref.task_id, timeout=7200)
-            results["steps"]["rfdiffusion"] = rfd_result
-            backbone_pdbs = rfd_result.get("pdb_files", [])
-        except Exception as rfd_err:
-            logger.warning("[pocket_guided] RFdiffusion failed: %s — scanning for partial PDBs", rfd_err)
-            # Recover any PDBs generated before failure/timeout
-            from pathlib import Path
-            rfd_output_dir = os.path.join(settings.OUTPUT_DIR, f"{req.job_name}_rfd", "rfdiffusion")
-            backbone_pdbs = [str(p) for p in Path(rfd_output_dir).glob("*.pdb")] if os.path.isdir(rfd_output_dir) else []
-            results["steps"]["rfdiffusion"] = {
-                "status": "partial", "error": str(rfd_err),
-                "pdb_files": backbone_pdbs, "n_recovered": len(backbone_pdbs),
-            }
-            if not backbone_pdbs:
-                raise RuntimeError(f"RFdiffusion failed with 0 designs: {rfd_err}")
-            logger.info("[pocket_guided] RFdiffusion partial: %d designs recovered after failure", len(backbone_pdbs))
-        logger.info("[pocket_guided] RFdiffusion: %d backbones", len(backbone_pdbs))
+        # Wait for all RFdiffusion tasks — collect backbones from all clusters
+        backbone_pdbs = []
+        rfd_results_all = []
+        for ci, cluster_str, rfd_ref in rfd_refs:
+            try:
+                rfd_result = await _wait_for_task(rfd_ref.task_id, timeout=7200)
+                rfd_results_all.append(rfd_result)
+                backbone_pdbs.extend(rfd_result.get("pdb_files", []))
+            except Exception as rfd_err:
+                logger.warning("[pocket_guided] RFdiffusion cluster %d failed: %s", ci, rfd_err)
+                from pathlib import Path
+                suffix = f"_c{ci}" if n_clusters > 1 else ""
+                rfd_output_dir = os.path.join(settings.OUTPUT_DIR, f"{req.job_name}_rfd{suffix}", "rfdiffusion")
+                partial = [str(p) for p in Path(rfd_output_dir).glob("*.pdb")] if os.path.isdir(rfd_output_dir) else []
+                backbone_pdbs.extend(partial)
+                rfd_results_all.append({"status": "partial", "error": str(rfd_err), "pdb_files": partial})
+
+        results["steps"]["rfdiffusion"] = {
+            "status": "completed" if backbone_pdbs else "failed",
+            "pdb_files": backbone_pdbs,
+            "n_clusters": n_clusters,
+            "cluster_results": rfd_results_all,
+        }
+        if not backbone_pdbs:
+            raise RuntimeError("RFdiffusion failed: 0 designs across all clusters")
+        logger.info("[pocket_guided] RFdiffusion: %d backbones from %d clusters", len(backbone_pdbs), n_clusters)
 
         # ── Step 9: ProteinMPNN on RFdiffusion backbones ─────────────────
         task.progress = 40

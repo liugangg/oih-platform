@@ -791,6 +791,16 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 - Tier 3 hotspots come from **computational prediction** (often scattered, low pLDDT)
 - HER2 = Tier 1 → fetch 1N8Z → extract C-chain interface → clustered hotspots → better RFdiffusion
 
+### 热点自动聚类规则（所有靶点通用）
+- 所有靶点在提交 RFdiffusion 前，自动对热点做空间聚类（`_multi_cluster_hotspots`）
+- 距离阈值：15Å（CA-CA 距离），≤15Å 归同组
+- 每组最多 5 个残基
+- 多个聚类 → 分别提交 RFdiffusion → 结果合并 → 统一 MPNN → ESM2 → AF3
+- BindCraft 只在第一个（最大）聚类上运行
+- 单聚类（≤3 个热点或全部在 15Å 内）→ 不分组
+- 适用：CD36/EGFR/CD20/HER2 multi-domain/任何大型蛋白
+- CD36 教训：5 个分散热点（A164-A400 跨 236 残基）→ ipTM=0.43 全部失败
+
 ### pLDDT Quality Expectations by Tier
 - Tier 1 hotspots → RFdiffusion backbone quality: pLDDT > 70 expected
 - Tier 3 hotspots → RFdiffusion backbone quality: pLDDT 40-70, need more designs
