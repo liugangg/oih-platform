@@ -67,6 +67,7 @@ class OIHToolExecutor:
         "igfold_predict":          ("POST", f"{OIH_API_BASE}/immunology/igfold"),
         "extract_interface_residues": ("POST", f"{OIH_API_BASE}/structure/extract_interface"),
         "generate_report":         ("POST", f"{OIH_API_BASE}/report/generate"),
+        "pesto_predict":           ("POST", f"{OIH_API_BASE}/structure/pesto_predict"),
     }
 
     async def execute(self, function_name: str, arguments: Dict[str, Any]) -> Dict:
