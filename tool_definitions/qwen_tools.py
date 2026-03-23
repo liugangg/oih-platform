@@ -1154,6 +1154,8 @@ QWEN_SYSTEM_PROMPT = """你是OIH生物计算平台的AI助手，运行在OIH服
 
 **target_name 规则**: 传入靶标名称（如 'HER2'）会自动触发 Tier 1 路径（从已知复合物提取界面残基），跳过 DiscoTope3 + 6D scoring。已知靶标：HER2, PD-L1, EGFR, VEGF, CD20, TNF。
 
+**热点自动聚类**: pipeline 自动对热点按空间距离聚类（15Å阈值）。分散热点 → 分组设计 → 各自 RFdiffusion → 合并 AF3 验证。不需要手动分组。CD36 教训：5 个分散热点跨 236 残基 → ipTM=0.43 全部失败。
+
 # === 工具注意事项（自动同步自 CLAUDE.md） ===
 
 ## 通用规则
@@ -1169,6 +1171,7 @@ QWEN_SYSTEM_PROMPT = """你是OIH生物计算平台的AI助手，运行在OIH服
 - data 验证 + addModel try/catch + 友好错误提示
 - **Bug 3 — RAG 残基编号匹配失败**：
 - DT3 阈值：**adaptive = max(top 20% score, 0.10)**，不要用固定 0.7
+- CD36 教训：5 个分散热点（A164-A400 跨 236 残基）→ ipTM=0.43 全部失败
 - pipeline 必须指定 `chains="A"` 过滤，否则 DiscoTope3 报 "No valid PDB"
 
 ## ADC 注意事项
