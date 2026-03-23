@@ -353,7 +353,7 @@ class PocketGuidedBinderPipelineRequest(BaseModel):
     num_rfdiffusion_designs: int = Field(10, description="Number of RFdiffusion backbone designs")
     num_mpnn_sequences: int = Field(8, description="MPNN sequences per backbone")
     binder_length: str = Field("70-120", description="Binder length range for RFdiffusion contig")
-    run_diffdock_validation: bool = Field(True, description="Run DiffDock blind docking to cross-validate pockets")
+    run_diffdock_validation: bool = Field(False, description="Removed: DiffDock is for small molecules, not protein binders")
     run_af3_validation: bool = Field(True, description="Run AF3 on top MPNN designs")
     dry_run: bool = Field(False, description="Return mock results without running tools")
 

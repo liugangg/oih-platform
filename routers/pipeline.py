@@ -2527,43 +2527,10 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
         if not hotspot_residues:
             raise RuntimeError("No usable hotspot residues from pocket scoring")
 
-        # ── Step 7: DiffDock druggability reference (optional) ───────────
-        if req.run_diffdock_validation:
-            task.progress = 17
-            task.progress_msg = "Step 7/16: DiffDock druggability reference on selected pocket..."
-            try:
-                from routers.molecular_docking import run_diffdock
-                dd_ref = await run_diffdock(DiffDockRequest(
-                    job_name=f"{req.job_name}_diffdock",
-                    receptor_pdb=target_pdb,
-                    ligand_smiles=req.probe_smiles,
-                    num_poses=5,
-                    inference_steps=20,
-                ))
-                dd_result = await _wait_for_task(dd_ref.task_id, timeout=600)
-                top_poses = dd_result.get("ranked_poses", [])[:3]
-                best_conf = top_poses[0].get("confidence") if top_poses else None
-                best_file = top_poses[0].get("file") if top_poses else None
-                results["steps"]["diffdock"] = {
-                    "status": "completed",
-                    "ranked_poses": top_poses,
-                    "output_dir": dd_result.get("output_dir"),
-                }
-                results["diffdock_reference"] = {
-                    "label": "small molecule druggability reference",
-                    "confidence": best_conf,
-                    "pose_path": best_file,
-                }
-                logger.info("[pocket_guided] DiffDock reference: confidence=%.2f",
-                             best_conf if best_conf else 0)
-            except Exception as e:
-                logger.warning("[pocket_guided] DiffDock failed (non-fatal): %s", e)
-                results["steps"]["diffdock"] = {"status": "failed", "error": str(e)}
-                results["diffdock_reference"] = {"label": "small molecule druggability reference",
-                                                  "error": str(e)}
-        else:
-            results["steps"]["diffdock"] = {"status": "skipped"}
-            results["diffdock_reference"] = None
+        # Step 7 (DiffDock) removed — small molecule druggability reference
+        # is irrelevant for protein binder/ADC design pipelines.
+        results["steps"]["diffdock"] = {"status": "removed"}
+        results["diffdock_reference"] = None
 
         # ── Step 8a+8b: RFdiffusion + BindCraft (with auto-clustering) ────
         task.progress = 22
