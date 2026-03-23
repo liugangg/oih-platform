@@ -2827,10 +2827,23 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
                             top_n, n_total)
 
                 from routers.structure_prediction import predict_alphafold3
+                # Get antigen domain regions for AF3 (domain truncation)
+                _tgt_name = req.target_name or req.pdb_id or req.job_name
+                _hs_nums = []
+                for h in hotspot_residues:
+                    try: _hs_nums.append(int(re.sub(r'[A-Za-z_:]', '', str(h))))
+                    except: pass
+                antigen_regions = _get_af3_antigen_regions(_tgt_name, target_seq, _hs_nums if _hs_nums else None)
+                # Use first (best) region for all designs
+                af3_antigen_seq = antigen_regions[0]["sequence"]
+                af3_domain = antigen_regions[0]["domain_name"]
+                logger.info("[pocket_guided] AF3 antigen: %s (%daa, full=%daa)",
+                            af3_domain, len(af3_antigen_seq), len(target_seq))
+
                 validated = []
                 for i, design in enumerate(top_designs):
                     task.progress = 55 + int(15 * i / max(top_n, 1))
-                    task.progress_msg = f"Step 11/16: AF3 {i+1}/{top_n}..."
+                    task.progress_msg = f"Step 11/16: AF3 {i+1}/{top_n} vs {af3_domain} ({len(af3_antigen_seq)}aa)..."
                     binder_seq = design.get("sequence", "")
                     if not binder_seq:
                         continue
@@ -2838,15 +2851,16 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
                         job_name=f"{req.job_name}_af3_val_{i}",
                         chains=[
                             AF3Chain(type="protein", sequence=binder_seq),
-                            AF3Chain(type="protein", sequence=target_seq),
+                            AF3Chain(type="protein", sequence=af3_antigen_seq),
                         ],
-                        num_seeds=1,
+                        num_seeds=3,
                     ))
                     try:
                         af3_result = await _wait_for_af3_task(af3_ref.task_id)
                     except Exception as e:
                         validated.append({"rank": i+1, "sequence": binder_seq,
-                                          "iptm": None, "passed": False, "error": str(e)})
+                                          "iptm": None, "passed": False, "error": str(e),
+                                          "domain": af3_domain})
                         if i < top_n - 1:
                             await asyncio.sleep(5)
                         continue
@@ -2867,6 +2881,8 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
                         "rank": i+1, "sequence": binder_seq,
                         "mpnn_score": design.get("score"),
                         "iptm": round(iptm, 4) if iptm is not None else None,
+                        "domain": af3_domain,
+                        "antigen_length": len(af3_antigen_seq),
                         "passed": passed,
                         "af3_dir": os.path.dirname(af3_result.get("cif_files", [""])[0]) if af3_result.get("cif_files") else None,
                     })
