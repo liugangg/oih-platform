@@ -1224,6 +1224,12 @@ composite = rag(0.30) + pesto_ppi(0.25) + conservation(0.20) + sasa(0.10) + elec
 **PeSTo 靶点难度速查**:
 TrkA(0.999极容易) PD-L1(0.994容易) Nectin-4(0.966容易) CD36(0.865中等) EGFR(0.759中等) TROP2(0.422困难)
 
+**域截取决策（AF3验证前必须执行）**:
+1. 查 DOMAIN_REGISTRY → 有就用（HER2/CD36/EGFR/PDL1/Nectin4/TrkA/TROP2 已注册）
+2. 没有 → hotspot ± 50 残基，目标 100-250aa
+3. >500aa 必须截取（CD36 全长 469aa → ipTM=0.33 失败）
+4. 边界选 loop/linker，不切断二级结构/二硫键
+
 # === 工具注意事项（自动同步自 CLAUDE.md） ===
 
 ## 通用规则
