@@ -23,6 +23,7 @@ SKILL_MAP = {
     "discotope3":  "DISCOTOPE3_WORKFLOW.md",
     "igfold":      "IGFOLD_WORKFLOW.md",
     "tool_scope":  "TOOL_SCOPE_RULES.md",
+    "binder_design": "BINDER_DESIGN_WORKFLOW.md",
 }
 
 KEYWORD_SKILL_MAP = {
@@ -45,6 +46,9 @@ KEYWORD_SKILL_MAP = {
     "discotope3":  ["discotope", "epitope", "表位", "b-cell", "b cell", "抗原表位", "免疫原性", "immunogenicity", "epitope prediction", "epitope mapping", "表位预测", "表位映射"],
     "igfold":      ["igfold", "antibody structure", "nanobody fold", "抗体结构预测", "纳米抗体折叠", "antibody folding"],
     "tool_scope":  ["适用范围", "tool scope", "when to use", "禁止", "误用", "binder_type", "tier"],
+    "binder_design": ["binder design", "hotspot", "binding site", "where to bind", "target analysis",
+                       "interface", "de novo binder", "pocket scoring", "tier classification",
+                       "domain truncation", "6D", "热点", "结合位点", "靶点分析", "域截取"],
 }
 
 def load_skill(skill_name: str) -> str:
@@ -70,7 +74,7 @@ PIPELINE_SKILL_BUNDLES = {
         "triggers": ["binder", "nanobody", "antibody", "抗体", "纳米抗体",
                       "结合蛋白", "adc", "ADC", "偶联", "drug conjugate",
                       "设计.*binder", "design.*binder"],
-        "skills": ["tool_scope", "alphafold3", "rfdiffusion", "proteinmpnn",
+        "skills": ["binder_design", "tool_scope", "alphafold3", "rfdiffusion", "proteinmpnn",
                    "discotope3", "igfold", "adc", "bindcraft"],
     },
     # drug discovery → full stack
