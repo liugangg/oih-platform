@@ -55,7 +55,11 @@ _GPU_TOOLS: frozenset = frozenset({
     "gnina", "autodock-gpu", "vina-gpu", "diffdock",
     "alphafold3", "rfdiffusion", "proteinmpnn", "bindcraft",
     "gromacs", "esm", "discotope3", "igfold",
-    # Pipelines (sequential GPU tool usage inside)
+})
+
+# Pipelines are orchestrators — they run on CPU queue (no VRAM),
+# their sub-tasks individually claim GPU slots when submitted.
+_PIPELINE_TOOLS: frozenset = frozenset({
     "pocket_guided_binder_pipeline", "binder_design_pipeline",
     "drug_discovery_pipeline",
 })
@@ -76,17 +80,18 @@ _VRAM_REQUIRED_MB: Dict[str, int] = {
     "chemprop":     4000,
     "discotope3":   6000,
     "igfold":       4000,
-    # Pipelines: use AF3-level VRAM (highest sub-tool requirement)
-    "pocket_guided_binder_pipeline": 20000,
-    "binder_design_pipeline":        20000,
-    "drug_discovery_pipeline":       20000,
+    # Pipelines: 0 VRAM — they're orchestrators, not GPU consumers.
+    # Sub-tasks claim their own VRAM when submitted.
+    "pocket_guided_binder_pipeline": 0,
+    "binder_design_pipeline":        0,
+    "drug_discovery_pipeline":       0,
 }
 
 # Tools that must NEVER go to DEGRADED queue — they require real GPU and will
 # crash/OOM on CPU fallback. When GPU VRAM is insufficient, these tools wait
 # for GPU slots to free up instead of being degraded.
 _NO_DEGRADED_TOOLS: frozenset = frozenset({
-    "alphafold3", "bindcraft",
+    "alphafold3", "bindcraft", "rfdiffusion", "gromacs",
 })
 
 
@@ -133,7 +138,7 @@ class TaskManager:
 
     Semaphore limits:
       CPU      → 8  concurrent  (lightweight: fpocket, P2Rank, Chemprop)
-      GPU      → 1  concurrent  (one at a time — RTX 4090 44GB, AF3 alone needs 20GB)
+      GPU      → 3  concurrent  (VRAM-based routing: AF3 20GB + RFdiff 4GB + MPNN 4GB = 28GB < 44GB)
       Degraded → 4  concurrent  (CPU+RAM fallback when VRAM insufficient)
     """
 
@@ -142,7 +147,7 @@ class TaskManager:
 
         # Semaphores (safe to create outside async context in Python 3.10+)
         self._cpu_sem      = asyncio.Semaphore(8)
-        self._gpu_sem      = asyncio.Semaphore(2)   # RTX 4090 44GB — 2 slots: 1 for pipeline + 1 for its GPU sub-task
+        self._gpu_sem      = asyncio.Semaphore(3)   # RTX 4090 44GB — VRAM-based routing, 3 concurrent (e.g. AF3 20GB + RFdiff 4GB + MPNN 4GB = 28GB)
         self._degraded_sem = asyncio.Semaphore(4)
 
         # Live active-slot counters (incremented inside semaphore, decremented on exit)
@@ -233,6 +238,10 @@ class TaskManager:
           - unknown tools   → GPU queue (conservative default)
         """
         if tool in _CPU_TOOLS:
+            return QueueType.CPU
+
+        # Pipelines are orchestrators — run on CPU queue, sub-tasks claim GPU individually
+        if tool in _PIPELINE_TOOLS:
             return QueueType.CPU
 
         if tool in _GPU_TOOLS:
@@ -332,7 +341,7 @@ class TaskManager:
                 logger.info(
                     f"[{queue.value.upper()}] START {tool}/{task.task_id[:8]} "
                     f"| cpu={self._cpu_active}/{8} "
-                    f"gpu={self._gpu_active}/{2} "
+                    f"gpu={self._gpu_active}/{3} "
                     f"deg={self._degraded_active}/{4}"
                 )
                 try:
@@ -352,7 +361,7 @@ class TaskManager:
                     logger.info(
                         f"[{queue.value.upper()}] DONE {tool}/{task.task_id[:8]} "
                         f"| cpu={self._cpu_active}/{8} "
-                        f"gpu={self._gpu_active}/{2} "
+                        f"gpu={self._gpu_active}/{3} "
                         f"deg={self._degraded_active}/{4}"
                     )
 
