@@ -675,24 +675,45 @@ def _extract_residue_numbers_from_text(text: str) -> list[str]:
 async def _rag_search_pocket_context(target_name: str, pdb_id: str) -> dict:
     """Query RAG system for binding site / epitope literature.
 
+    Uses multi-query strategy to maximize coverage:
+      Q1: protein-protein interaction interface + known binders
+      Q2: crystal structure complex + co-crystal
+      Q3: domain binding + functional residues + mutagenesis
+
     Returns: {text: str, residues: list[str], domains: list[str], kd_values: list[str]}
     """
-    query = f"{target_name} {pdb_id} binding site epitope domain experimental validation"
+    queries = [
+        f"{target_name} antibody nanobody binding interface residues epitope",
+        f"{target_name} {pdb_id} crystal structure complex co-crystal known ligand",
+        f"{target_name} domain binding site mutagenesis functional residues interaction partner",
+    ]
     result = {"text": "", "residues": [], "domains": [], "kd_values": []}
+
+    all_papers = []
     try:
-        # Call retriever directly to avoid self-HTTP deadlock with single-worker uvicorn
         from retrieval.rag_router import get_retriever
         retriever = get_retriever()
-        papers_obj = await retriever.retrieve(
-            query, n_pubmed=6, n_biorxiv=3, n_local=4, years_back=5,
-        )
-        papers = [p.to_dict() for p in papers_obj] if papers_obj else []
+        seen_titles = set()
+        for query in queries:
+            try:
+                papers_obj = await retriever.retrieve(
+                    query, n_pubmed=4, n_biorxiv=2, n_local=3, years_back=5,
+                )
+                for p in (papers_obj or []):
+                    pd = p.to_dict()
+                    title = pd.get("title", "")
+                    if title not in seen_titles:
+                        seen_titles.add(title)
+                        all_papers.append(pd)
+            except Exception:
+                continue
     except Exception as e:
         logger.warning("[pocket_scoring] RAG search failed: %s", e)
         return result
 
-    if not papers:
+    if not all_papers:
         return result
+    papers = all_papers
 
     # Combine abstracts/text
     texts = []
