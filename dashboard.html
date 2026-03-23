@@ -986,7 +986,7 @@ function App(){
     const poll=async()=>{
       try{
         const[tR,hR]=await Promise.all([
-          fetch(`${API}/api/v1/tasks/?limit=40`).then(r=>r.ok?r.json():null).catch(()=>null),
+          fetch(`${API}/api/v1/tasks/?limit=100`).then(r=>r.ok?r.json():null).catch(()=>null),
           fetch(`${API}/health`).then(r=>r.ok?r.json():null).catch(()=>null),
         ]);
         if(!live)return;
