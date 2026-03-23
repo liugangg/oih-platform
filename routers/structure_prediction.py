@@ -339,3 +339,89 @@ async def extract_interface_residues(req: ExtractInterfaceRequest):
                 len(result["interface_residues"]), result["interface_residues"])
 
     return result
+
+
+# ─── PeSTo PPI Interface Prediction ─────────────────────────────────────────
+
+class PeSToRequest(BaseModel):
+    job_name: str = Field("pesto_predict", description="Job identifier")
+    input_pdb: str = Field(..., description="Path to PDB file (single chain recommended)")
+    chain_id: Optional[str] = Field(None, description="Chain to analyze (auto-extracts from complex)")
+    threshold: float = Field(0.5, description="PPI score threshold for hotspot residues")
+
+
+@router.post("/pesto_predict", summary="PeSTo PPI interface prediction")
+async def pesto_predict(req: PeSToRequest):
+    """Predict protein-protein interaction interface using PeSTo transformer.
+
+    ROC AUC=0.92, replaces P2Rank+DiscoTope3 for binder design hotspot selection.
+    For complex PDBs, specify chain_id to auto-extract the target chain.
+    Runs on CPU in oih-proteinmpnn container (~10s per structure).
+    """
+    import subprocess
+    import logging
+    logger = logging.getLogger("oih")
+
+    pdb_path = req.input_pdb
+    if not os.path.exists(pdb_path):
+        raise HTTPException(status_code=400, detail=f"PDB not found: {pdb_path}")
+
+    # Auto-extract single chain if chain_id specified
+    single_chain_pdb = pdb_path
+    if req.chain_id:
+        extract_script = (
+            f"import gemmi\n"
+            f"st = gemmi.read_structure('{pdb_path}')\n"
+            f"model = st[0]\n"
+            f"chains_to_remove = [c.name for c in model if c.name != '{req.chain_id}']\n"
+            f"for cn in chains_to_remove:\n"
+            f"    model.remove_chain(cn)\n"
+            f"st.write_pdb('/tmp/pesto_input_{req.chain_id}.pdb')\n"
+            f"print('OK')\n"
+        )
+        try:
+            proc = subprocess.run(
+                ["docker", "exec", "-w", "/app/pesto", "oih-proteinmpnn", "python3", "-c", extract_script],
+                capture_output=True, text=True, timeout=30,
+            )
+            if "OK" in proc.stdout:
+                single_chain_pdb = f"/tmp/pesto_input_{req.chain_id}.pdb"
+                logger.info("[PeSTo] Extracted chain %s → %s", req.chain_id, single_chain_pdb)
+        except Exception as e:
+            logger.warning("[PeSTo] Chain extraction failed: %s, using full PDB", e)
+
+    # Run PeSTo prediction
+    output_json = f"/tmp/pesto_output_{req.job_name}.json"
+    cmd = [
+        "docker", "exec", "-w", "/app/pesto", "oih-proteinmpnn",
+        "python3", "predict_cli.py",
+        "--input", single_chain_pdb,
+        "--output", output_json,
+        "--threshold", str(req.threshold),
+    ]
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if proc.returncode != 0:
+            raise RuntimeError(f"PeSTo failed: {proc.stderr[:300]}")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="PeSTo timed out (120s)")
+
+    # Read result from container
+    try:
+        read_proc = subprocess.run(
+            ["docker", "exec", "oih-proteinmpnn", "cat", output_json],
+            capture_output=True, text=True, timeout=10,
+        )
+        import json as _json
+        result = _json.loads(read_proc.stdout.strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read PeSTo output: {e}")
+
+    result["chain_id"] = req.chain_id
+    result["input_pdb"] = req.input_pdb
+    logger.info("[PeSTo] %s chain=%s: %d hotspots (>%.1f), max=%.3f",
+                os.path.basename(pdb_path), req.chain_id or "all",
+                result.get("num_hotspots", 0), req.threshold, result.get("max_score", 0))
+
+    return result
