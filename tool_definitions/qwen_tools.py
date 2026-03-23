@@ -227,9 +227,10 @@ ALL_TOOLS = [
         "function": {
             "name": "p2rank_predict_pockets",
             "description": (
-                "Predict binding pockets using P2Rank machine learning model. "
-                "More accurate than Fpocket for AlphaFold structures. "
-                "Returns ranked binding sites with probability scores and coordinates. "
+                "Predict SMALL MOLECULE binding pockets using P2Rank machine learning model. "
+                "WARNING: P2Rank detects druggable cavities for small molecules, NOT protein-protein interfaces. "
+                "For binder/ADC design, use PeSTo PPI interface prediction instead. "
+                "P2Rank is useful for: molecular docking, drug discovery, pocket detection. "
                 "Use 'alphafold' model when input is an AlphaFold prediction."
             ),
             "parameters": {
@@ -902,9 +903,11 @@ ALL_TOOLS = [
                 "Predict B-cell epitopes on protein structures using DiscoTope3 (deep learning + XGBoost ensemble). "
                 "Input: PDB file path (antibody or antigen structure). "
                 "Output: per-residue epitope propensity scores with calibrated normalization. "
-                "Use cases: (1) identify antigen surface epitopes for antibody targeting, "
+                "WARNING: DiscoTope3 predicts B-cell EPITOPES (immunogenicity), NOT optimal binder design sites. "
+                "For binder hotspot selection, use PeSTo PPI interface prediction instead. "
+                "CD36 proof: DiscoTope3 A397-400 → 0/10 AF3 pass; PeSTo A187-194 → much better. "
+                "Use cases: (1) identify antigen surface epitopes for VACCINE design (not binder), "
                 "(2) validate predicted antibody-antigen interfaces from AF3, "
-                "(3) guide hotspot selection for binder design (RFdiffusion/BindCraft), "
                 "(4) epitope mapping for vaccine antigen selection. "
                 "For AlphaFold-predicted structures, set struc_type='alphafold'. "
                 "Threshold: low=0.40 (sensitive), moderate=0.90 (default), high=1.50 (strict). "
@@ -1008,6 +1011,37 @@ ALL_TOOLS = [
                 "required": ["job_prefix"],
             },
             "_endpoint": f"{API_BASE}/report/generate",
+            "_method": "POST",
+        }
+    },
+
+    # ─── PeSTo PPI Interface Prediction ──────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "pesto_predict",
+            "description": (
+                "Predict protein-protein interaction (PPI) interface from a protein structure using PeSTo "
+                "(Protein Structure Transformer). ROC AUC=0.92, outperforms MaSIF-site(0.80) and DiscoTope3. "
+                "Input: PDB single chain (IMPORTANT: for complex PDBs, extract target chain first). "
+                "Output: per-residue PPI interface probability (0-1), hotspot residues (score>0.5). "
+                "USE FOR: de novo binder design hotspot selection (replaces P2Rank + DiscoTope3). "
+                "DO NOT use on full complex PDB — extract the target protein chain first, otherwise "
+                "scores are suppressed at already-occupied interfaces (PD-L1: complex 0.44 → single chain 0.99). "
+                "Deployed in oih-proteinmpnn container (/app/pesto/). CPU only, ~10s per structure. "
+                "Upstream: fetch_pdb (extract target chain). "
+                "Downstream: hotspot residues → rfdiffusion_design or pocket_guided_binder_pipeline."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "job_name": {"type": "string", "description": "Job identifier"},
+                    "input_pdb": {"type": "string", "description": "Path to PDB file (SINGLE CHAIN of target protein)"},
+                    "threshold": {"type": "number", "default": 0.5, "description": "Score threshold for hotspot residues"},
+                },
+                "required": ["job_name", "input_pdb"],
+            },
+            "_endpoint": f"{API_BASE}/structure/pesto_predict",
             "_method": "POST",
         }
     },
@@ -1157,6 +1191,38 @@ QWEN_SYSTEM_PROMPT = """你是OIH生物计算平台的AI助手，运行在OIH服
 **热点自动聚类**: pipeline 自动对热点按空间距离聚类（15Å阈值）。分散热点 → 分组设计 → 各自 RFdiffusion → 合并 AF3 验证。不需要手动分组。CD36 教训：5 个分散热点跨 236 残基 → ipTM=0.43 全部失败。
 
 **RAG 优先级**: PPI interface > epitope。RAG 搜到共晶结构/突变验证的结合残基时，必须优先用这些做 hotspot，覆盖 DiscoTope3 表位预测。B 细胞表位 ≠ 最佳 binder 设计位点。
+
+## Binder 设计推理框架（每次设计任务必须遵循）
+
+收到 binder/ADC 设计请求时，按此顺序推理：
+
+**Step 1: 靶标识别**
+- 识别靶标名称 + PDB ID
+- 判断 Tier: KNOWN_COMPLEXES 命中 → Tier 1; 否则 → Tier 3
+
+**Step 2: Hotspot 来源决策**
+- Tier 1: extract_interface_residues → 实验验证 hotspot（最可靠）
+- Tier 3 优先级: RAG文献界面 > PeSTo PPI > conservation > DiscoTope3 epitope
+- 绝不用 DiscoTope3 单独决定 hotspot（CD36 教训：0/10 pass）
+
+**Step 3: 评分公式**
+composite = rag(0.30) + pesto_ppi(0.25) + conservation(0.20) + sasa(0.10) + electrostatics(0.15)
+已移除: P2Rank（小分子口袋）、DiscoTope3 epitope（免疫原性≠PPI）
+
+**Step 4: 设计参数**
+- binder_type: de_novo（默认）→ 跳过 IgFold; nanobody → 启用 IgFold
+- 域截取: >500aa 必须截取到 ~200aa（DOMAIN_REGISTRY）
+- 双路: RFdiffusion(hotspot) + BindCraft(free explore)
+
+**Step 5: 验证**
+- AF3 num_seeds=3, ipTM ≥ 0.6
+- 域截取后 AF3 更准（HER2: 全长 0.84 vs 截取 0.86）
+
+**Step 6: ADC（仅 pass 的设计）**
+- FreeSASA → Lys/Cys → NHS-amine/maleimide → RDKit conjugate
+
+**PeSTo 靶点难度速查**:
+TrkA(0.999极容易) PD-L1(0.994容易) Nectin-4(0.966容易) CD36(0.865中等) EGFR(0.759中等) TROP2(0.422困难)
 
 # === 工具注意事项（自动同步自 CLAUDE.md） ===
 
