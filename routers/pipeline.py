@@ -112,6 +112,51 @@ DOMAIN_REGISTRY = {
             },
         ],
     },
+    # Nectin-4 (UniProt Q96NY8)
+    "NECTIN4": {
+        "uniprot": "Q96NY8",
+        "signal_peptide_offset": 0,
+        "druggable_domains": [
+            {
+                "name": "d1_d2",
+                "range": (32, 240),
+                "hotspot_center": 212,
+                "description": "Ig-like D1+D2 domains, PeSTo L208/R212/Y214 (score 0.95-0.97)",
+            },
+        ],
+    },
+    # TROP2 (UniProt P09758)
+    "TROP2": {
+        "uniprot": "P09758",
+        "signal_peptide_offset": 0,
+        "druggable_domains": [
+            {
+                "name": "ectodomain",
+                "range": (30, 274),
+                "hotspot_center": 150,
+                "description": "Full ectodomain (PeSTo max=0.42, flat surface — difficult target)",
+            },
+        ],
+    },
+    # TrkA (UniProt P04629)
+    "TRKA": {
+        "uniprot": "P04629",
+        "signal_peptide_offset": 0,
+        "druggable_domains": [
+            {
+                "name": "d5_domain",
+                "range": (280, 400),
+                "hotspot_center": 302,
+                "description": "NGF binding D5 domain, PeSTo P302/C300/S304 (score 0.999)",
+            },
+            {
+                "name": "ectodomain",
+                "range": (34, 423),
+                "hotspot_center": 300,
+                "description": "Full ECD (fallback)",
+            },
+        ],
+    },
 }
 
 DOMAIN_PADDING = 30  # 域边界两侧各保留30aa

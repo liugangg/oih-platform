@@ -92,3 +92,34 @@ HER2 (Tier1): C558-C573 → ipTM=0.86, 3/10 pass, ADC成功
 CD36 DiscoTope3: A397-400 → ipTM=0.33, 0/10 全败
 CD36 PeSTo: A187-194 → 待验证
 CD36 CLESH文献: E101/D106/E108/D109 → 待验证
+
+## 域截取自主决策规则（不依赖硬编码 DOMAIN_REGISTRY）
+
+当 DOMAIN_REGISTRY 没有该靶点时，Qwen 应自主确定截取范围：
+
+### Step 1: 查 UniProt domain 注释
+- Signal peptide（截掉）
+- Transmembrane（截掉）
+- Topological domain: Extracellular（保留）
+- Domain: Ig-like D1/D2/D3
+
+### Step 2: 确定 hotspot 所在的最小结构域
+- 截取该 domain ± 30 残基 buffer
+
+### Step 3: 大小验证
+- 目标: 100-250aa（AF3 最高效区间）
+- <100aa: 扩大 buffer; >500aa: 必须截取
+
+### Step 4: 结构完整性
+- 不切断 beta-sheet/alpha-helix
+- 二硫键 Cys-Cys 配对都要在范围内
+- 边界选 loop/linker 区域
+
+### 截取公式
+center = mean(hotspots); range = (min(hotspots)-50, max(hotspots)+50)
+如果 <80aa，扩大到 center ± 60
+
+### 案例
+- HER2 C558-C573 → Domain IV (488-630) 142aa → ipTM=0.86
+- CD36 PeSTo A187-194 → (140-240) 100aa → 待验证
+- CD36 全长 469aa → ipTM=0.33 失败
