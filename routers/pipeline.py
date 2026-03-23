@@ -55,16 +55,28 @@ DOMAIN_REGISTRY = {
             },
         ],
     },
-    # CD36 (UniProt P16671)
+    # CD36 (UniProt P16671) — 3 sub-domains for targeted AF3
     "CD36": {
         "uniprot": "P16671",
         "signal_peptide_offset": 0,
         "druggable_domains": [
             {
-                "name": "extracellular_loop",
+                "name": "pesto_ppi_core",
+                "range": (140, 240),
+                "hotspot_center": 191,
+                "description": "PeSTo PPI interface core (L187-P193, score 0.50-0.87) + buffer",
+            },
+            {
+                "name": "clesh_domain",
+                "range": (50, 180),
+                "hotspot_center": 106,
+                "description": "CLESH domain (TSP-1 binding, E101/D106/E108/D109, mutagenesis validated)",
+            },
+            {
+                "name": "extracellular_full",
                 "range": (30, 439),
                 "hotspot_center": 200,
-                "description": "Major extracellular domain, fatty acid binding",
+                "description": "Full extracellular domain (fallback only)",
             },
         ],
     },
