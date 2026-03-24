@@ -1214,6 +1214,14 @@ composite = rag(0.30) + pesto_ppi(0.25) + conservation(0.20) + sasa(0.10) + elec
 - 域截取: >500aa 必须截取到 ~200aa（DOMAIN_REGISTRY）
 - 双路: RFdiffusion(hotspot) + BindCraft(free explore)
 
+**Step 4.5: CRITICAL — MPNN chain 检测（2026-03-24血泪教训）**
+RFdiffusion binder_design 输出：最短链=binder, 最长链=target。
+**绝不能硬编码 chains_to_design='A'**。必须检测最短链：
+- 正确: chains_to_design = shortest_chain（自动检测）
+- 错误: chains_to_design = 'A'（导致设计 target 蛋白而非 binder）
+验证: MPNN FASTA 的 original 序列应是 60-100aa(binder)，不是几百aa(target)
+教训: 273次 MPNN 全部设计了错误的链，pipeline.py 已修复为动态检测
+
 **Step 5: 验证**
 - AF3 num_seeds=3, ipTM ≥ 0.6
 - 域截取后 AF3 更准（HER2: 全长 0.84 vs 截取 0.86）
@@ -1342,4 +1350,3 @@ q' | gmx make_ndx` 合并 Protein 和 LIG 组
    - 遇到了什么问题
    - 如何诊断和修复
    - 最终结果（ipTM/结合能/DAR等关键指标）
-"""
