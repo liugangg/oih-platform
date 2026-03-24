@@ -87,11 +87,72 @@ DAR=4, NHS-PEG4-MMAE, 7条NHS-amine SMARTS
 - IgFold: 仅nanobody/antibody，de novo binder跳过
 - PeSTo: PPI interface预测，替代P2Rank+DiscoTope3
 
+## 11. 多靶点并行调度策略
+
+### GPU 资源模型 (RTX 4090, 44GB)
+| 工具 | VRAM | 时间 | 可并行 |
+|------|------|------|--------|
+| RFdiffusion | 4-10GB | 20min | 3个并行 (共~20GB) |
+| ProteinMPNN | 4GB | 2min | 可与RFdiff并行 |
+| ESM2 | 6GB | 5min | 可与MPNN并行 |
+| AF3 | 20GB | 15min | 必须独占 |
+| BindCraft | 16GB | 30min | 最多+1个小任务 |
+| PeSTo | 0 (CPU) | 10s | 不占GPU |
+| FreeSASA | 0 (CPU) | 5s | 不占GPU |
+
+### 最优调度：pipeline式流水线
+```
+GPU时间线:
+─────────────────────────────────────────────────
+RFdiff(靶1) + RFdiff(靶2) + RFdiff(靶3)  ← 3并行
+    ↓              ↓              ↓
+MPNN(靶1) + RFdiff(靶4) + MPNN(靶2)      ← 穿插
+    ↓                              ↓
+AF3(靶1_val0) + MPNN(靶3)                ← AF3独占+小任务
+    ↓
+AF3(靶1_val1)
+    ↓
+AF3(靶2_val0) + MPNN(靶4)
+    ...
+─────────────────────────────────────────────────
+CPU时间线（完全并行，不等GPU）:
+PeSTo(所有靶点) | RAG(所有靶点) | FreeSASA | ipSAE计算
+─────────────────────────────────────────────────
+```
+
+### Qwen 调度规则
+1. **Pipeline 在 CPU 队列**：pipeline 是编排器，不占 GPU slot
+2. **GPU semaphore=3**：最多3个GPU任务并行（VRAM-based routing 自动判断）
+3. **RFdiffusion 可3并行**：每个4-10GB，3个共20-30GB < 44GB
+4. **AF3 必须独占**：20GB，同时最多跑1个AF3 + 1个小任务(MPNN/ESM2)
+5. **CPU任务随时跑**：PeSTo/FreeSASA/RAG/RDKit 不受GPU限制
+6. **失败恢复**：RFdiffusion 完成的 backbone 保留在 outputs/，MPNN 可以手动补跑
+
+### 批量提交策略
+当用户要求多个靶点时：
+```python
+# 正确：一次提交所有，让调度器自动排队
+for target in targets:
+    submit_pipeline(target)  # 全部 pending，按 VRAM 自动调度
+
+# 错误：等一个完了再提下一个
+for target in targets:
+    submit_pipeline(target)
+    wait_until_complete()  # 浪费GPU空闲时间
+```
+
+### 失败恢复模式
+如果 pipeline 中途失败（如 MPNN timeout）：
+1. 检查哪一步完成了（RFdiffusion backbone 在 outputs/ 里）
+2. 手动补跑失败步骤（不需要重跑 RFdiffusion）
+3. 示例：CLESH v4 RFdiffusion ✅ → MPNN timeout → 手动提交 9 个 MPNN 任务
+
 ## 案例参考
 HER2 (Tier1): C558-C573 → ipTM=0.86, 3/10 pass, ADC成功
-CD36 DiscoTope3: A397-400 → ipTM=0.33, 0/10 全败
-CD36 PeSTo: A187-194 → 待验证
-CD36 CLESH文献: E101/D106/E108/D109 → 待验证
+CD36 DiscoTope3: A397-400 → ipTM=0.33, ipSAE=0.000, 0/10 全败
+CD36 PeSTo v5: A187-194 → ipTM=0.55, ipSAE=0.193, 最佳CD36设计
+CD36 PeSTo v6 n=50: ipTM=0.18, 更多≠更好（稀释了探索聚焦）
+CD36 CLESH: E101/D106/E108/D109 → MPNN timeout，手动补跑中
 
 ## 域截取自主决策规则（不依赖硬编码 DOMAIN_REGISTRY）
 
