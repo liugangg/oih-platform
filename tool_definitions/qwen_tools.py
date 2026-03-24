@@ -1230,6 +1230,14 @@ TrkA(0.999极容易) PD-L1(0.994容易) Nectin-4(0.966容易) CD36(0.865中等) 
 3. >500aa 必须截取（CD36 全长 469aa → ipTM=0.33 失败）
 4. 边界选 loop/linker，不切断二级结构/二硫键
 
+**多靶点并行调度（GPU 44GB）**:
+- Pipeline 在 CPU 队列，不占 GPU slot
+- GPU semaphore=3: RFdiffusion 可3并行(各4-10GB)，AF3 独占(20GB)+1小任务
+- 批量提交所有靶点，调度器自动按 VRAM 排队
+- CPU任务(PeSTo/RAG/FreeSASA)随时跑不受GPU限制
+- 失败恢复: RFdiffusion backbone 保留在 outputs/，MPNN 可手动补跑
+- 更多designs≠更好(CD36: n=10 ipTM=0.55 vs n=50 ipTM=0.18)
+
 # === 工具注意事项（自动同步自 CLAUDE.md） ===
 
 ## 通用规则
