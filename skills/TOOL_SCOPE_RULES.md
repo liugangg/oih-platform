@@ -69,6 +69,23 @@ DiscoTope3 + IEDB + RAG → known_epitope_override → RFdiffusion → ProteinMP
 - RAG 搜索分两层：Layer 1 (PPI共晶/突变) → Layer 2 (epitope fallback)
 - CD36 教训：DiscoTope3 选了表面暴露残基 A397/A400，但应该用 CLESH domain (93-120)
 
+## MPNN Chain 检测（2026-03-24 严重 bug）
+
+RFdiffusion binder_design 输出中链顺序不固定：
+- 最短链 = binder scaffold (60-100aa)
+- 最长链 = target protein (100-600aa)
+
+**绝不能硬编码 chains_to_design='A'**。
+必须用 gemmi 检测最短链作为 binder chain。
+
+| 靶点 | RFdiff chain A | RFdiff chain B | MPNN 应设计 |
+|------|---------------|---------------|------------|
+| HER2 (原始C链) | binder 214aa | target 85aa | A ✅ (碰巧对) |
+| CD36 (原始A链) | target 400aa | binder 83aa | B ❌→修复 |
+| EGFR (原始A链) | target 613aa | binder ~80aa | B ❌→修复 |
+
+验证方法：MPNN FASTA original 序列长度 60-100aa = 正确(binder)，几百aa = 错误(target)
+
 ### 历史教训
 - IgFold 误用于 de novo binder → pLDDT 全部 0.4-12.6 → 0 个候选进入 AF3
 - 根因：IgFold 使用 AntiBERTy，只在抗体数据集上训练
