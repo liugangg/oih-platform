@@ -1725,11 +1725,25 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
         task.progress_msg = f"Step 2/7: ProteinMPNN on {len(backbone_pdbs)} backbones..."
         from routers.protein_design import run_proteinmpnn
         all_sequences = []
+        # Detect binder chain: RFdiffusion binder_design outputs chain A=target, B=binder
+        # MPNN must redesign the BINDER chain (shorter one), not the target
+        _binder_chain = "B"  # RFdiffusion binder_design default
+        try:
+            import gemmi as _gemmi
+            _st = _gemmi.read_structure(backbone_pdbs[0])
+            _chains = [(c.name, len([r for r in c if r.entity_type == _gemmi.EntityType.Polymer])) for c in _st[0]]
+            _chains.sort(key=lambda x: x[1])
+            _binder_chain = _chains[0][0]  # shortest chain = binder
+            logger.info("[binder_pipeline] Detected binder chain: %s (%d res)", _binder_chain, _chains[0][1])
+        except Exception:
+            pass
+
         for i, pdb in enumerate(backbone_pdbs[:20]):  # cap at 20 for time
             mpnn_req = ProteinMPNNRequest(
                 job_name=f"{req.job_name}_mpnn_{i}",
                 input_pdb=pdb,
                 num_sequences=req.num_mpnn_sequences,
+                chains_to_design=_binder_chain,
             )
             mpnn_ref = await run_proteinmpnn(mpnn_req)
             mpnn_result = await _wait_for_task(mpnn_ref.task_id, timeout=600)
@@ -2812,12 +2826,25 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
         # ── Step 9: ProteinMPNN on RFdiffusion backbones ─────────────────
         task.progress = 40
         task.progress_msg = f"Step 9/16: ProteinMPNN on {len(backbone_pdbs)} backbones..."
+        # Detect binder chain from RFdiffusion backbone
+        _binder_chain2 = "B"
+        try:
+            import gemmi as _gemmi
+            _st2 = _gemmi.read_structure(backbone_pdbs[0])
+            _ch2 = [(c.name, len([r for r in c if r.entity_type == _gemmi.EntityType.Polymer])) for c in _st2[0]]
+            _ch2.sort(key=lambda x: x[1])
+            _binder_chain2 = _ch2[0][0]
+            logger.info("[pocket_guided] Binder chain: %s (%d res)", _binder_chain2, _ch2[0][1])
+        except Exception:
+            pass
+
         all_sequences = []
         for i, pdb in enumerate(backbone_pdbs[:20]):
             mpnn_ref = await run_proteinmpnn(ProteinMPNNRequest(
                 job_name=f"{req.job_name}_mpnn_{i}",
                 input_pdb=pdb,
                 num_sequences=req.num_mpnn_sequences,
+                chains_to_design=_binder_chain2,
             ))
             mpnn_result = await _wait_for_task(mpnn_ref.task_id, timeout=600)
             all_sequences.append(mpnn_result)
