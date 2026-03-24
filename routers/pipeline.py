@@ -743,9 +743,9 @@ def _compute_pesto_score_for_pocket(pdb_path: str, pocket_residues: list, pesto_
     if pesto_cache is not None and pdb_path in pesto_cache:
         scores = pesto_cache[pdb_path]
     else:
-        # Run PeSTo in container
+        # Run PeSTo in container — returns {pdb_resid: score} with proper residue numbering
         script = (
-            "import sys,json,torch as pt,numpy as np;"
+            "import sys,json,torch as pt,numpy as np,gemmi;"
             "sys.path.insert(0,'/app/pesto');"
             "from config import config_model;from model import Model;"
             "from src.dataset import StructuresDataset,collate_batch_features;"
@@ -758,8 +758,9 @@ def _compute_pesto_score_for_pocket(pdb_path: str, pocket_residues: list, pesto_
             " for su,fp in ds:\n"
             "  st=concatenate_chains(su);X,M=encode_structure(st);q=encode_features(st)[0];"
             "  ids,_,_,_,_=extract_topology(X,64);X,ids,q,M=collate_batch_features([[X,ids,q,M]]);"
-            "  z=m(X,ids,q,M.float());p=pt.sigmoid(z[:,0]).cpu().numpy();"
-            "  result={str(i):float(p[i]) for i in range(len(p))};"
+            "  z=m(X,ids,q,M.float());p=pt.sigmoid(z[:,0]).cpu().numpy();\n"
+            f"  gs=gemmi.read_structure('{pdb_path}');ch=gs[0][0];residues=list(ch);"
+            "  result={f'{ch.name}{residues[i].seqid.num}':float(p[i]) for i in range(min(len(p),len(residues)))};"
             "  break\n"
             "print(json.dumps(result))"
         )
@@ -779,34 +780,32 @@ def _compute_pesto_score_for_pocket(pdb_path: str, pocket_residues: list, pesto_
             logger.warning("PeSTo error: %s", e)
             return 0.0
 
-    # Map pocket residues to indices and compute mean score
-    # pocket_residues are like ['A42', 'A45'] — need to map to PeSTo indices
-    # PeSTo uses sequential 0-based index matching PDB residue order
-    # For now, use all scores if no mapping available
+    # scores dict is now keyed by PDB residue ID (e.g. "A300", "A302")
+    # pocket_residues are like ['A42', 'A45'] — direct lookup
     if not scores:
         return 0.0
 
     all_scores = list(scores.values())
-    # Simple: return mean of all PPI scores (whole-protein baseline)
-    # Better: map pocket residues to indices (needs PDB residue list)
-    pocket_nums = set()
-    for r in pocket_residues:
-        try:
-            pocket_nums.add(int(re.sub(r'[A-Za-z_:]', '', str(r))))
-        except (ValueError, TypeError):
-            pass
 
-    if pocket_nums:
-        # Average PeSTo score for pocket residue indices
-        # Approximate: assume PDB residue numbers map ~linearly to indices
-        matched = [float(scores.get(str(i), 0)) for i in range(len(all_scores))
-                    if i < len(all_scores)]
-        # Use top quartile of all scores as pocket score proxy
-        sorted_scores = sorted(all_scores, reverse=True)
-        top_quarter = sorted_scores[:max(1, len(sorted_scores) // 4)]
-        return round(float(np.mean(top_quarter)) if top_quarter else 0, 4)
+    if pocket_residues:
+        # Direct lookup: pocket residues match PeSTo keys (both use chain+resid)
+        matched = [scores.get(r, 0) for r in pocket_residues if r in scores]
+        if matched:
+            return round(float(np.mean(matched)), 4)
+        # Fallback: try without chain letter
+        for r in pocket_residues:
+            num = re.sub(r'[A-Za-z_:]', '', str(r))
+            for key, val in scores.items():
+                if num in key:
+                    matched.append(val)
+                    break
+        if matched:
+            return round(float(np.mean(matched)), 4)
 
-    return round(float(np.mean(all_scores)), 4) if all_scores else 0.0
+    # No pocket specified: return mean of top quartile (whole-protein PPI signal)
+    sorted_scores = sorted(all_scores, reverse=True)
+    top_quarter = sorted_scores[:max(1, len(sorted_scores) // 4)]
+    return round(float(np.mean(top_quarter)) if top_quarter else 0, 4)
 
 
 async def _rag_search_pocket_context(target_name: str, pdb_id: str) -> dict:
