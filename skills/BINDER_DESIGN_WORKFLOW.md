@@ -184,3 +184,16 @@ center = mean(hotspots); range = (min(hotspots)-50, max(hotspots)+50)
 - HER2 C558-C573 → Domain IV (488-630) 142aa → ipTM=0.86
 - CD36 PeSTo A187-194 → (140-240) 100aa → 待验证
 - CD36 全长 469aa → ipTM=0.33 失败
+
+## CRITICAL: RFdiffusion输出链顺序规则
+
+RFdiffusion binder_design模式输出PDB中：
+- **chain A = binder scaffold**（de novo设计的，长度60-100aa）
+- **chain B = target**（原始靶蛋白）
+
+无论输入PDB的链是什么（A/B/C），RFdiffusion输出后binder永远是最短的链。
+
+ProteinMPNN必须设计binder链，不能硬编码chains_to_design='A'。
+pipeline.py已修复（2026-03-24）：动态检测最短链作为binder_chain。
+
+**验证方法**：MPNN输出FASTA的original序列长度应该是60-100aa（binder），不是几百aa（target）。

@@ -849,3 +849,9 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 - DiffDock removed from binder pipeline
 - 7-target benchmark: PeSTo done, AF3 running for 5 new targets
 - Distillation: 81 cases (target 100 for LoRA)
+
+## 2026-03-24 CRITICAL BUG FIX: MPNN chains_to_design
+RFdiffusion binder_design输出：chain A=binder(短), chain B=target(长)。
+MPNN之前硬编码designed_chains=['A']，对HER2(原始chainC)恰好正确，对其他靶点(原始chainA)全部设计了target。
+修复：pipeline.py动态检测最短链作为binder_chain。
+HER2(ipTM=0.86)数据有效。其他5个靶点需要用fixed代码重跑。
