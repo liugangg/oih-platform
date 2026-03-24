@@ -838,3 +838,14 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 - CD36 proof: DiscoTope3 A397-400 → 0/10 pass; PeSTo A187-194 → testing
 - Baker lab never used epitope tools for hotspot selection
 - RAG-first: literature PPI interfaces always override computational epitope predictions
+
+### 2026-03-24 Session Summary
+- PeSTo deployed (tool #32): ROC AUC=0.92, replaces P2Rank+DiscoTope3
+- ipSAE deployed: reveals DT3 ipTM=0.43 is false positive (ipSAE=0.000)
+- Scoring formula: 6D → PPI-optimized (rag+pesto+conservation+sasa+electrostatics)
+- RAG: 2-layer search (PPI interface > epitope fallback)
+- Scheduler: pipeline→CPU, GPU sem=3, RFdiff 3-parallel
+- DOMAIN_REGISTRY: +Nectin-4, +TROP2, +TrkA, CD36 split to 3 sub-domains
+- DiffDock removed from binder pipeline
+- 7-target benchmark: PeSTo done, AF3 running for 5 new targets
+- Distillation: 81 cases (target 100 for LoRA)
