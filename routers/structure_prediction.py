@@ -103,11 +103,11 @@ async def predict_alphafold3(req: AlphaFold3Request):
             len(c.sequence or '') for c in req.chains if c.type in ('protein', 'rna', 'dna')
         )
         if total_len > 1000:
-            af3_timeout = 3600
+            af3_timeout = 7200   # 2h — very large complexes
         elif total_len > 500:
-            af3_timeout = 2400
+            af3_timeout = 5400   # 90min — large complexes
         else:
-            af3_timeout = 1200
+            af3_timeout = 3600   # 1h — includes MSA search time (jackhmmer can take 30min+)
 
         import logging as _log
         _log.getLogger("oih").info(
@@ -280,6 +280,8 @@ async def extract_interface_residues(req: ExtractInterfaceRequest):
     logger = logging.getLogger("oih")
 
     pdb_path = req.complex_pdb
+    logger.info("[extract_interface] pdb=%s receptor=%s ligand=%s cutoff=%.1f top_n=%d",
+                pdb_path, req.receptor_chain, req.ligand_chains, req.cutoff_angstrom, req.top_n)
     if not os.path.exists(pdb_path):
         raise HTTPException(status_code=400, detail=f"PDB file not found: {pdb_path}")
 

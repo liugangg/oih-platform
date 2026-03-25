@@ -69,20 +69,19 @@ def detect_skills(user_message: str) -> List[str]:
 # When a pipeline-level task is detected, auto-inject all related skills
 # so Qwen has complete decision context (not just keyword-matched subset)
 PIPELINE_SKILL_BUNDLES = {
-    # binder/ADC design → needs ALL of these to make correct decisions
+    # binder/ADC design → binder_design workflow already covers RFdiffusion/MPNN/AF3/ADC rules
+    # Only add tool_scope (small, complementary) — no need to duplicate individual tool workflows
     "binder_design": {
         "triggers": ["binder", "nanobody", "antibody", "抗体", "纳米抗体",
                       "结合蛋白", "adc", "ADC", "偶联", "drug conjugate",
                       "设计.*binder", "design.*binder"],
-        "skills": ["binder_design", "tool_scope", "alphafold3", "rfdiffusion", "proteinmpnn",
-                   "discotope3", "igfold", "adc", "bindcraft"],
+        "skills": ["binder_design", "tool_scope"],
     },
-    # drug discovery → full stack
+    # drug discovery → binder_design has the full pipeline; add fpocket for pocket analysis
     "drug_discovery": {
         "triggers": ["drug discovery", "药物发现", "靶点.*设计", "pipeline",
                       "端到端", "end.to.end"],
-        "skills": ["tool_scope", "alphafold3", "rfdiffusion", "proteinmpnn",
-                   "discotope3", "adc", "fpocket", "esm"],
+        "skills": ["binder_design", "tool_scope", "fpocket"],
     },
 }
 
@@ -92,19 +91,49 @@ def build_dynamic_system_prompt(base_prompt: str, user_message: str) -> Tuple[st
 
     # Pipeline-aware injection: if a pipeline task is detected,
     # add all related skills that Qwen needs for correct decision-making
+    # Pipeline-aware injection: if a pipeline task is detected,
+    # replace individually-matched tool skills with the consolidated workflow.
+    # e.g. binder_design workflow already covers rfdiffusion/proteinmpnn/af3/adc rules,
+    # so injecting those individually is wasteful token duplication.
     msg_lower = user_message.lower()
+    _COVERED_BY_BUNDLE = {
+        "binder_design": {"rfdiffusion", "proteinmpnn", "alphafold3", "adc",
+                          "bindcraft", "discotope3", "igfold"},
+        "drug_discovery": {"rfdiffusion", "proteinmpnn", "alphafold3", "adc",
+                           "discotope3", "esm"},
+    }
     for bundle_name, bundle in PIPELINE_SKILL_BUNDLES.items():
         import re as _re
         if any(_re.search(t, msg_lower) for t in bundle["triggers"]):
+            # Remove individual skills that the bundle's workflow already covers
+            covered = _COVERED_BY_BUNDLE.get(bundle_name, set())
+            detected = [s for s in detected if s not in covered]
             for skill in bundle["skills"]:
                 if skill not in detected:
                     detected.append(skill)
 
-    sections = []
+    # Load skills sorted by size (smallest first = most skills fit), enforce char budget
+    # vLLM context=32768 tokens; base_prompt~10K chars + tools~40K chars → ~20K chars left for skills
+    MAX_SKILL_CHARS = 15000
+
+    loaded = []
     for name in detected:
         content = load_skill(name)
         if content:
-            sections.append(f"## [{name.upper()} 操作规程]\n\n{content}")
+            loaded.append((name, content))
+
+    # Sort by file size ascending — pack more small skills before hitting budget
+    loaded.sort(key=lambda x: len(x[1]))
+
+    sections = []
+    total_chars = 0
+    injected = []
+    for name, content in loaded:
+        if total_chars + len(content) > MAX_SKILL_CHARS:
+            continue
+        sections.append(f"## [{name.upper()} 操作规程]\n\n{content}")
+        total_chars += len(content)
+        injected.append(name)
 
     if sections:
         skill_block = "\n\n---\n\n".join(sections)
@@ -115,6 +144,12 @@ def build_dynamic_system_prompt(base_prompt: str, user_message: str) -> Tuple[st
             + "=" * 60
             + "\n\n" + skill_block
         )
+        if len(detected) > len(injected):
+            skipped = [n for n in detected if n not in injected]
+            import logging
+            logging.getLogger("oih").info(
+                "[SkillsLoader] Budget %d/%d chars, injected %d/%d skills, skipped: %s",
+                total_chars, MAX_SKILL_CHARS, len(injected), len(detected), skipped)
         return augmented, detected
 
     return base_prompt, detected

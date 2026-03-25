@@ -295,8 +295,8 @@ async def _wait_for_af3_task(task_id: str) -> dict:
         elif task.status == TaskStatus.FAILED:
             err = task.error or ""
             err_lower = err.lower()
-            # Fatal errors: OOM or process crash
-            if any(k in err_lower for k in ("oom", "out of memory", "exit 1", "exit code")):
+            # Fatal errors: OOM, process crash, or timeout (no point retrying)
+            if any(k in err_lower for k in ("oom", "out of memory", "exit 1", "exit code", "timed out", "timeout")):
                 raise RuntimeError(f"AF3 task {task_id} failed (fatal): {err}")
             # Track repeated non-fatal errors
             if err == last_error:
@@ -1704,6 +1704,41 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
         else:
             raise ValueError("Provide either pdb_id (RCSB fetch) or target_pdb (local path)")
 
+        # Step 0.5: Auto-detect hotspots via Tier classification if none provided
+        if not hotspot_str:
+            _target_name = getattr(req, 'target_name', '') or req.job_name
+            tier_info = _classify_target_tier(_target_name, req.pdb_id or "", {})
+            if tier_info["tier"] == 1:
+                # Tier1: extract interface from known complex PDB
+                task.progress_msg = "Auto-detecting hotspots (Tier1: extract_interface)..."
+                from routers.structure_prediction import (
+                    fetch_pdb as _fetch, FetchPDBRequest as _FR,
+                    extract_interface_residues, ExtractInterfaceRequest,
+                )
+                complex_pdb_result = await _fetch(_FR(pdb_id=tier_info["pdb"]))
+                interface_result = await extract_interface_residues(ExtractInterfaceRequest(
+                    job_name=f"{req.job_name}_interface",
+                    complex_pdb=complex_pdb_result["output_pdb"],
+                    receptor_chain=tier_info["receptor_chain"],
+                    ligand_chains=tier_info["ligand_chains"],
+                    cutoff_angstrom=5.0, top_n=6,
+                ))
+                hotspot_str = ",".join(interface_result["interface_residues"])
+                results["steps"]["hotspot_discovery"] = {
+                    "method": "tier1_extract_interface",
+                    "source_pdb": tier_info["pdb"],
+                    "source_antibody": tier_info["source"],
+                    "hotspots": interface_result["interface_residues"],
+                }
+                logger.info("[binder_pipeline] Tier1 auto-hotspot from %s: %s",
+                            tier_info["pdb"], hotspot_str)
+            else:
+                results["steps"]["hotspot_discovery"] = {
+                    "method": f"tier{tier_info['tier']}_user_provided",
+                    "note": "No hotspots provided and target not in KNOWN_COMPLEXES. "
+                            "Consider running PeSTo for Tier3 targets.",
+                }
+
         # Step 1: RFdiffusion backbone generation
         task.progress = 5
         task.progress_msg = "Step 1/7: RFdiffusion backbone generation..."
@@ -2143,14 +2178,17 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
 # ─── Target Tier Classification ───────────────────────────────────────────────
 
 # Known antibody-antigen complex structures for Tier 1 hotspot extraction
+# IMPORTANT: All chain IDs MUST be verified from actual PDB structure using gemmi.
+# Never guess ligand_chains — always check: gemmi.read_structure(pdb) → list all chains + sizes.
+# Lesson: 1YY9 EGFR had ligand_chains=["B"] (wrong), actual cetuximab is ["C","D"].
 KNOWN_COMPLEXES = {
-    "HER2":  {"pdb": "1N8Z", "receptor_chain": "C", "ligand_chains": ["A", "B"], "source": "trastuzumab"},
+    "HER2":  {"pdb": "1N8Z", "receptor_chain": "C", "ligand_chains": ["A", "B"], "source": "trastuzumab"},        # C(581aa) vs A(214)+B(220) Fab
     "ERBB2": {"pdb": "1N8Z", "receptor_chain": "C", "ligand_chains": ["A", "B"], "source": "trastuzumab"},
-    "PD-L1": {"pdb": "5XXY", "receptor_chain": "A", "ligand_chains": ["B"],      "source": "atezolizumab"},
-    "EGFR":  {"pdb": "1YY9", "receptor_chain": "A", "ligand_chains": ["B"],      "source": "cetuximab"},
-    "VEGF":  {"pdb": "1BJ1", "receptor_chain": "V", "ligand_chains": ["A", "B"], "source": "bevacizumab"},
-    "CD20":  {"pdb": "6Y4J", "receptor_chain": "A", "ligand_chains": ["H", "L"], "source": "rituximab"},
-    "TNF":   {"pdb": "3WD5", "receptor_chain": "A", "ligand_chains": ["H", "L"], "source": "adalimumab"},
+    "PD-L1": {"pdb": "5XXY", "receptor_chain": "A", "ligand_chains": ["H", "L"], "source": "atezolizumab"},       # A(99aa PD-L1) vs H(208)+L(211) Fab
+    "EGFR":  {"pdb": "1YY9", "receptor_chain": "A", "ligand_chains": ["C", "D"], "source": "cetuximab"},          # A(613aa) vs C(211)+D(220) Fab
+    "VEGF":  {"pdb": "1BJ1", "receptor_chain": "V", "ligand_chains": ["H", "L"], "source": "bevacizumab"},        # V(94aa VEGF) vs H(218)+L(213) Fab; W/J/K are symmetry mates
+    "TNF":   {"pdb": "3WD5", "receptor_chain": "A", "ligand_chains": ["H", "L"], "source": "adalimumab"},         # A(152aa TNF) vs H(214)+L(213) Fab
+    # CD20 6Y4J removed — only 1 chain (A, 426aa), no antibody in this structure
 }
 
 

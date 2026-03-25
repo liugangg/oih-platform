@@ -167,13 +167,22 @@ class QwenBioAgent:
         while iteration < max_iterations:
             iteration += 1
 
-            # Call Qwen
+            # Call Qwen — fit conversation history within vLLM context limit
+            # Budget: 32768 tokens total - 8192 output - ~8000 system/tools ≈ 16000 tokens for history
+            # ~3 chars/token → ~48000 chars budget for history
+            MAX_HISTORY_CHARS = 48000
+            history_window = self.conversation_history[-10:]
+            total_chars = sum(len(str(m.get("content", ""))) for m in history_window)
+            while total_chars > MAX_HISTORY_CHARS and len(history_window) > 1:
+                dropped = history_window.pop(0)
+                total_chars -= len(str(dropped.get("content", "")))
+
             async with httpx.AsyncClient(timeout=60 + thinking_budget * 0.1) as client:  # 动态timeout
                 payload = {
                     "model": QWEN_MODEL,
                     "messages": [
                         {"role": "system", "content": dynamic_system}
-                    ] + self.conversation_history[-10:],
+                    ] + history_window,
                     "tools": ALL_TOOLS,
                     "tool_choice": "auto",
                     "max_tokens": 8192,

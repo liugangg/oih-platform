@@ -23,28 +23,40 @@ Layer 2 (epitope fallback — 仅当Layer1无结果):
 - CD36实证: DiscoTope3 A397-400 → ipTM=0.33全败
 - Baker lab从未用epitope工具选hotspot
 
-## 3. PeSTo PPI 界面预测（替代P2Rank+DiscoTope3）
-- ROC AUC 0.92（vs MaSIF-site 0.80）
-- 输入: PDB单链 → 输出: 每个残基PPI interface概率(0-1)
-- 部署: proteinmpnn容器内 /app/pesto/
-- 重要: 对复合物PDB必须提取靶蛋白单链再跑
-  （复合物跑会压低已占界面的分数，如PD-L1从0.44→0.99）
+## 3. Hotspot 发现：Tier决定方法
 
-### PeSTo 已验证靶点难度表
+### 核心规则：Tier1 用 extract_interface，Tier3 用 PeSTo
+| Tier | 条件 | Hotspot 方法 | 示例 |
+|------|------|-------------|------|
+| Tier1 | PDB有共晶复合物 | `extract_interface_residues` 直接提取界面残基 | HER2(1N8Z), EGFR(1YY9), PD-L1(4ZQK) |
+| Tier3 | 无共晶/无已知binding partner | PeSTo 预测单链PPI界面 | CD36(5LGD), TROP2(7PEE), Nectin-4(4GJT) |
+
+**禁止**: 对Tier1靶点跑PeSTo（浪费时间，且共晶界面比预测更可靠）
+**禁止**: 对Tier3靶点跑extract_interface（无共晶→无界面可提取）
+
+### Tier1: extract_interface_residues
+- 输入: 共晶复合物PDB + receptor_chain + ligand_chains
+- 输出: 界面残基列表（距离<5Å的接触残基）
+- 直接用作 RFdiffusion hotspot，无需额外预测
+
+### Tier3: PeSTo PPI 界面预测
+- ROC AUC 0.92（vs MaSIF-site 0.80）
+- **必须输入单链PDB**（复合物会压低已占界面分数，如PD-L1从0.44→0.99）
+- 操作: 先用gemmi提取target单链PDB → 再调用pesto_predict
+- 部署: proteinmpnn容器内 /app/pesto/
+
+### PeSTo 已验证靶点难度表（仅Tier3靶点）
 | 靶点 | PDB | Chain | Max PPI | >0.5残基 | 难度 |
 |------|-----|-------|---------|----------|------|
 | TrkA | 1HE7 | A | 0.999 | 59 | 极容易 |
-| PD-L1 | 4ZQK | A单链 | 0.994 | 23 | 容易 |
 | Nectin-4 | 4GJT | A | 0.966 | 56 | 容易 |
 | CD36 | 5LGD | A | 0.865 | 8 | 中等 |
-| EGFR | 1YY9 | A单链 | 0.759 | 19 | 中等 |
-| HER2 | 1N8Z | full | 0.668 | 3 | Tier1已完成 |
 | TROP2 | 7PEE | full | 0.422 | 0 | 困难 |
 
 ## 4. Hotspot 选择规则
 来源优先级:
-1. 文献实验验证（共晶/mutagenesis）>>> 所有计算预测
-2. PeSTo PPI interface (score > 0.5) > 单一计算工具
+1. 共晶界面残基（extract_interface, Tier1）>>> 所有计算预测
+2. PeSTo PPI interface (score > 0.5, Tier3) > 单一计算工具
 3. 保守+表面+中等凹度 > 高暴露但平坦
 
 空间聚类: _cluster_hotspots()
@@ -197,3 +209,13 @@ ProteinMPNN必须设计binder链，不能硬编码chains_to_design='A'。
 pipeline.py已修复（2026-03-24）：动态检测最短链作为binder_chain。
 
 **验证方法**：MPNN输出FASTA的original序列长度应该是60-100aa（binder），不是几百aa（target）。
+
+## 新增靶点检查清单（MANDATORY）
+添加靶点到 KNOWN_COMPLEXES 前必须完成：
+1. `gemmi.read_structure()` 查所有链的长度和编号
+2. 确认 receptor_chain（通常最长的蛋白链 = target）
+3. 确认 ligand_chains（抗体 Fab = Heavy + Light 两条链，不要猜）
+4. 写入 KNOWN_COMPLEXES 后用 `extract_interface` 验证 hotspot 数量合理（≥3 个残基）
+5. 在 `qwen_tools.py` 的 tool description 中同步更新 chain ID 列表
+
+**反例：** EGFR 1YY9 猜了 ligand_chains=["B"]，实际是 ["C","D"]。CD20 6Y4J 只有单链无抗体，不能放进 KNOWN_COMPLEXES。

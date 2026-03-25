@@ -733,23 +733,22 @@ ALL_TOOLS = [
             "name": "pocket_guided_binder_pipeline",
             "description": (
                 "Run COMPLETE pocket-guided binder design + ADC pipeline (16 steps) with "
-                "6D pocket scoring (including DiscoTope3 epitope prediction) + BindCraft parallel path: "
-                "1) fetch_pdb → 2) RAG literature search (binding site evidence, residue extraction) → "
-                "3) fpocket + P2Rank + DiscoTope3 (parallel: pocket detection + B-cell epitope prediction) → "
+                "PPI-optimized pocket scoring (PeSTo + RAG + conservation) + BindCraft parallel path: "
+                "1) fetch_pdb → 2) RAG 2-layer literature search (Layer1: PPI interface, Layer2: epitope fallback) → "
+                "3) Tier classification (Tier1: extract_interface from known complex; Tier3: PeSTo PPI prediction) → "
                 "4) FreeSASA per pocket (surface exposure) → "
                 "5) B-factor conservation + electrostatics → "
-                "6) 6D Composite scoring (p2rank×0.15 + sasa×0.15 + conservation×0.15 + rag×0.25 + "
-                "electrostatics×0.10 + epitope×0.20) + Qwen structural biologist pocket selection → "
-                "7) DiffDock druggability reference (on selected pocket only) → "
-                "8a) RFdiffusion binder backbone (epitope-enriched hotspots) + 8b) BindCraft (parallel) → "
+                "6) PPI-optimized composite scoring: rag(0.30) + pesto_ppi(0.25) + conservation(0.20) + "
+                "sasa(0.10) + electrostatics(0.15). P2Rank and DiscoTope3 epitope REMOVED (B-cell epitope ≠ PPI interface). "
+                "Qwen structural biologist pocket selection → "
+                "8a) RFdiffusion binder backbone (PPI hotspots) + 8b) BindCraft (parallel) → "
                 "9) ProteinMPNN → 10) merge MPNN+BindCraft candidates → "
                 "11) AlphaFold3 validation (ipTM≥0.6) → "
                 "12-16) ADC construction: FreeSASA conjugation sites → Linker → MMAE → RDKit (DAR=4). "
-                "DiscoTope3 predicts B-cell epitopes (antibody binding sites) on the target antigen — "
-                "pockets overlapping with predicted epitopes are prioritized for binder design. "
-                "If DiscoTope3 fails, epitope score falls back to 0.0 (non-blocking). "
+                "KEY: Tier1 targets (HER2/EGFR/PD-L1 with known co-crystal) use extract_interface for hotspots. "
+                "Tier3 targets (CD36/TROP2/novel) use PeSTo PPI prediction on single-chain PDB. "
                 "Unlike binder_design_pipeline, this pipeline AUTOMATICALLY detects and scores "
-                "binding pockets using 6 criteria + literature evidence — no hotspot_residues needed. "
+                "binding pockets using 5 PPI criteria + literature evidence — no hotspot_residues needed. "
                 "Returns: pocket_scores (per-pocket 6D breakdown), selected_pocket (id/center/hotspots/epitope_enriched/reason), "
                 "diffdock_reference (confidence/pose_path). "
                 "Use when: user says 'design a binder for [target]' without specifying residues, "
@@ -960,11 +959,15 @@ ALL_TOOLS = [
                 "DECISION LOGIC: "
                 "- Target has known antibody complex PDB → use this tool FIRST. "
                 "- No known complex → use discotope3_predict + rag_search instead. "
-                "KNOWN COMPLEXES: "
+                "KNOWN COMPLEXES (VERIFIED chain IDs — use EXACTLY as shown): "
                 "- HER2/ERBB2: 1N8Z (trastuzumab, receptor_chain=C, ligand_chains=[A,B]). "
-                "- PD-L1: 5XXY (atezolizumab, receptor_chain=A, ligand_chains=[B]). "
-                "- EGFR: 1YY9 (cetuximab, receptor_chain=A, ligand_chains=[B]). "
-                "- VEGF: 1BJ1 (bevacizumab, receptor_chain=V, ligand_chains=[A,B]). "
+                "- PD-L1: 5XXY (atezolizumab, receptor_chain=A, ligand_chains=[H,L]). "
+                "- EGFR: 1YY9 (cetuximab, receptor_chain=A, ligand_chains=[C,D]). "
+                "- VEGF: 1BJ1 (bevacizumab, receptor_chain=V, ligand_chains=[H,L]). "
+                "- TNF: 3WD5 (adalimumab, receptor_chain=A, ligand_chains=[H,L]). "
+                "WARNING: ligand_chains must be verified from actual PDB structure. Never guess chain IDs. "
+                "IMPORTANT: You MUST use fetch_pdb to download the FULL complex PDB (all chains) first, "
+                "NOT a single-chain extract. Pass the full PDB path as complex_pdb. "
                 "Upstream: fetch_pdb. "
                 "Downstream: rfdiffusion_design (pass interface_residues as hotspot_residues)."
             ),
@@ -1263,6 +1266,8 @@ TrkA(0.999极容易) PD-L1(0.994容易) Nectin-4(0.966容易) CD36(0.865中等) 
 - DT3 阈值：**adaptive = max(top 20% score, 0.10)**，不要用固定 0.7
 - CD36 教训：5 个分散热点（A164-A400 跨 236 残基）→ ipTM=0.43 全部失败
 - pipeline 必须指定 `chains="A"` 过滤，否则 DiscoTope3 报 "No valid PDB"
+- **永远不要猜 ligand_chains。** 添加新靶点到 KNOWN_COMPLEXES 前必须执行：
+- **已验证的 KNOWN_COMPLEXES：**
 
 ## ADC 注意事项
 - Step 3: AF3 验证 — top5 MPNN → AF3 复合物 → ipTM 分级（≥0.75 high / ≥0.6 low_confidence）
