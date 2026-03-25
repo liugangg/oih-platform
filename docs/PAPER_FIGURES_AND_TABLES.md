@@ -46,13 +46,15 @@ Target: Nature Methods / Nature Machine Intelligence
 **Panel A**: PeSTo difficulty spectrum
 - Bar chart: TrkA(0.999) → PD-L1(0.994) → Nectin-4(0.966) → CD36(0.865) → EGFR(0.759) → TROP2(0.422)
 **Panel B**: Binder design success rate per target
-- HER2: 3/10 (30%)
-- CD36: 0/25 (ipTM) but 1/5 with ipSAE signal
-- TrkA/PD-L1/Nectin-4/EGFR/TROP2: pending
+- HER2: 3/10 (30%), best ipSAE=0.529
+- Nectin-4: 2/5 (40%), best ipSAE=0.679 ★
+- CD36: 0/25 (ipTM) but 1/5 with ipSAE signal (0.193)
+- EGFR: 0/1 partial, TROP2: 0/3 partial
+- TrkA/PD-L1: pending
 **Panel C**: GPU scheduling efficiency
 - 3-parallel RFdiffusion: timeline visualization
-**Data**: PeSTo done, AF3 pending for 5 targets
-**Status**: Need AF3 results
+**Data**: PeSTo done, Nectin-4+HER2+CD36 AF3 complete, EGFR/TROP2 partial
+**Status**: Can generate with current data (3/7 targets complete)
 
 ## Figure 5 — Agent Decision Making (schematic)
 **Panel A**: RAG 2-layer search decision tree
@@ -105,7 +107,17 @@ Include: PeSTo, extract_interface_residues, pesto_predict
 | EGFR | 0.759 | — | 19 | Multi-domain |
 | TROP2 | 0.422 | — | 0 | Flat surface, difficult |
 
-## Table 5 — Scoring Formula Evolution
+## Table 5 — Nectin-4 Complete Results (Best Case Study)
+| Design | ipTM | ranking_score | ipSAE | ipSAE_d0chn | pDockQ2 | LIS | Site | SASA | ADC |
+|--------|------|--------------|-------|-------------|---------|-----|------|------|-----|
+| **val_2** | **0.870** | **0.91** | **0.679** | **0.854** | **0.762** | 0.506 | B:K195 | 213.1 Å² | SMCC-NHS+MMAE ✅ |
+| val_4 | 0.780 | — | 0.523 | 0.742 | 0.534 | 0.389 | B:K195 | 214.2 Å² | SMCC-NHS+MMAE ✅ |
+| val_1 | 0.310 | — | — | — | — | — | — | — | — |
+| val_3 | 0.260 | — | — | — | — | — | — | — | — |
+| val_0 | 0.210 | — | — | — | — | — | — | — | — |
+Nectin-4 val_2 ipSAE=0.679 is the best across all targets (HER2 best=0.529, CD36 best=0.193)
+
+## Table 6 — Scoring Formula Evolution
 | Version | Formula | Best Result |
 |---------|---------|-------------|
 | v1 (6D) | p2rank+sasa+conservation+rag+electrostatics+epitope | HER2 ipTM=0.60 |
@@ -116,13 +128,14 @@ Include: PeSTo, extract_interface_residues, pesto_predict
 |--------|-----|------|-------|-----------|-----------|-----------|-----|
 | HER2 | 1N8Z | 1 | 0.668 | 0.86 | 0.529 | 3/10 | ✅ |
 | CD36 | 5LGD | 3 | 0.865 | 0.55 | 0.193 | 0/25* | ✅† |
+| **Nectin-4** | **4GJT** | **3** | **0.966** | **0.870** | **0.679** | **2/5** | **✅** |
+| EGFR | 1YY9 | 1 | 0.759 | 0.270 | — | 0/1‡ | — |
+| TROP2 | 7PEE | 3 | 0.422 | 0.220 | — | 0/3‡ | — |
 | TrkA | 1HE7 | 3 | 0.999 | pending | — | — | — |
 | PD-L1 | 4ZQK | 1 | 0.994 | pending | — | — | — |
-| Nectin-4 | 4GJT | 3 | 0.966 | pending | — | — | — |
-| EGFR | 1YY9 | 1 | 0.759 | pending | — | — | — |
-| TROP2 | 7PEE | 3 | 0.422 | pending | — | — | — |
 *0/25 by ipTM≥0.6, but 1 design has ipSAE=0.193 (real binding signal)
 †ADC assembled on best design regardless of ipTM threshold
+‡AF3 partially completed, remaining designs pending
 
 ## Table 7 — Distillation Training Cases
 81 cases across 5 sessions, covering:

@@ -45,9 +45,34 @@ async def run_in_container(
         return proc.returncode, stdout.decode(), stderr.decode()
     except asyncio.TimeoutError:
         proc.kill()
+        await _kill_container_processes(container, cmd[0] if cmd else "python")
         raise TimeoutError(f"Container {container} timed out after {timeout}s")
     except Exception as e:
         raise RuntimeError(f"Docker exec failed on {container}: {e}")
+
+
+async def _kill_container_processes(container: str, cmd_pattern: str):
+    """Kill processes inside a container matching cmd_pattern.
+
+    `docker exec` creates processes parented to the container's init (containerd-shim),
+    NOT to the API process. So killing the host-side `docker exec` wrapper does NOT
+    kill the actual process inside the container — it keeps running, holding GPU VRAM.
+    This helper sends SIGKILL to matching processes inside the container.
+    """
+    try:
+        kill_cmd = (
+            f"for pid in $(ps aux | grep '{cmd_pattern}' | grep -v grep | awk '{{print $2}}'); "
+            f"do kill -9 $pid 2>/dev/null; done"
+        )
+        kill_proc = await asyncio.create_subprocess_exec(
+            "docker", "exec", container, "bash", "-c", kill_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(kill_proc.communicate(), timeout=10)
+        logger.info(f"[{container}] Killed container processes matching '{cmd_pattern}'")
+    except Exception as e:
+        logger.warning(f"[{container}] Failed to kill container processes: {e}")
 
 
 async def run_in_container_streaming(
@@ -84,6 +109,8 @@ async def run_in_container_streaming(
         )
     except asyncio.TimeoutError:
         proc.kill()
+        # Also kill the actual process inside the container (docker exec orphan problem)
+        await _kill_container_processes(container, cmd[0] if cmd else "python")
         raise TimeoutError(f"{container} timed out after {timeout}s")
 
     return proc.returncode, "\n".join(output_lines)

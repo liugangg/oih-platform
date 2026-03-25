@@ -855,3 +855,30 @@ RFdiffusion binder_design输出：chain A=binder(短), chain B=target(长)。
 MPNN之前硬编码designed_chains=['A']，对HER2(原始chainC)恰好正确，对其他靶点(原始chainA)全部设计了target。
 修复：pipeline.py动态检测最短链作为binder_chain。
 HER2(ipTM=0.86)数据有效。其他5个靶点需要用fixed代码重跑。
+
+## CRITICAL: KNOWN_COMPLEXES 链分配必须从PDB文件验证
+**永远不要猜 ligand_chains。** 添加新靶点到 KNOWN_COMPLEXES 前必须执行：
+```python
+import gemmi
+st = gemmi.read_structure('path/to/PDB.pdb')
+for c in st[0]:
+    nres = sum(1 for r in c if r.entity_type == gemmi.EntityType.Polymer)
+    print(f'Chain {c.name}: {nres}aa')
+```
+然后人工判断：哪条链是 target（通常最长），哪些链是 ligand（抗体 Fab = 两条 Heavy+Light 链）。
+
+**已验证的 KNOWN_COMPLEXES：**
+| PDB | Target | receptor_chain | ligand_chains | 验证日期 |
+|-----|--------|---------------|---------------|----------|
+| 1N8Z | HER2 | C(581aa) | [A(214),B(220)] | 2026-03-25 |
+| 5XXY | PD-L1 | A(99aa) | [H(208),L(211)] | 2026-03-25 |
+| 1YY9 | EGFR | A(613aa) | [C(211),D(220)] | 2026-03-25 |
+| 1BJ1 | VEGF | V(94aa) | [H(218),L(213)] | 2026-03-25 |
+| 3WD5 | TNF | A(152aa) | [H(214),L(213)] | 2026-03-25 |
+
+**教训：** 1YY9 EGFR 最初写了 ligand_chains=["B"]（猜的），实际 cetuximab 是 C+D 链。导致 extract_interface 提取了错误界面，浪费了整个 v2 pipeline。
+
+## CRITICAL: ADC偶联位点必须在binder链上
+FreeSASA分析AF3复合物时，必须只看binder链的Lys/Cys，不能选antigen链。
+ADC结构: binder-linker-payload，payload挂在binder上。
+antigen链上的Lys（如HER2 B:K603）绝对不能作为偶联位点。

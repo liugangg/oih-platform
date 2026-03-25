@@ -150,6 +150,9 @@ class TaskManager:
         self._gpu_sem      = asyncio.Semaphore(3)   # RTX 4090 44GB — VRAM-based routing, 3 concurrent (e.g. AF3 20GB + RFdiff 4GB + MPNN 4GB = 28GB)
         self._degraded_sem = asyncio.Semaphore(4)
 
+        # AF3 exclusive lock — AF3 needs ~20-40GB VRAM, only 1 at a time on 46GB GPU
+        self._af3_sem      = asyncio.Semaphore(1)
+
         # Live active-slot counters (incremented inside semaphore, decremented on exit)
         self._cpu_active:      int = 0
         self._gpu_active:      int = 0
@@ -331,39 +334,44 @@ class TaskManager:
         task  = self.create_task(tool, input_params, queue)
         sem, counter_attr = self._sem_and_counter(queue)
 
+        # AF3 gets an additional exclusive lock so only 1 AF3 task runs at a time,
+        # even though gpu_sem allows 3 concurrent GPU tasks (AF3 uses 20-40GB of 46GB).
+        af3_lock = self._af3_sem if tool == "alphafold3" else asyncio.Semaphore(1)
+
         async def _run():
-            async with sem:
-                # Increment active counter inside the semaphore
-                setattr(self, counter_attr, getattr(self, counter_attr) + 1)
-                task.status     = TaskStatus.RUNNING
-                task.started_at = datetime.utcnow().isoformat()
-                self._persist(task)
-                logger.info(
-                    f"[{queue.value.upper()}] START {tool}/{task.task_id[:8]} "
-                    f"| cpu={self._cpu_active}/{8} "
-                    f"gpu={self._gpu_active}/{3} "
-                    f"deg={self._degraded_active}/{4}"
-                )
-                try:
-                    result         = await coro_fn(task)
-                    task.result    = result
-                    task.status    = TaskStatus.COMPLETED
-                    task.progress  = 100
+            async with af3_lock:
+                async with sem:
+                    # Increment active counter inside the semaphore
+                    setattr(self, counter_attr, getattr(self, counter_attr) + 1)
+                    task.status     = TaskStatus.RUNNING
+                    task.started_at = datetime.utcnow().isoformat()
                     self._persist(task)
-                except Exception as e:
-                    task.status = TaskStatus.FAILED
-                    task.error  = str(e)
-                    self._persist(task)
-                    logger.error(f"[{queue.value.upper()}] FAIL {tool}/{task.task_id[:8]}: {e}")
-                finally:
-                    setattr(self, counter_attr, getattr(self, counter_attr) - 1)
-                    task.completed_at = datetime.utcnow().isoformat()
                     logger.info(
-                        f"[{queue.value.upper()}] DONE {tool}/{task.task_id[:8]} "
+                        f"[{queue.value.upper()}] START {tool}/{task.task_id[:8]} "
                         f"| cpu={self._cpu_active}/{8} "
                         f"gpu={self._gpu_active}/{3} "
                         f"deg={self._degraded_active}/{4}"
                     )
+                    try:
+                        result         = await coro_fn(task)
+                        task.result    = result
+                        task.status    = TaskStatus.COMPLETED
+                        task.progress  = 100
+                        self._persist(task)
+                    except Exception as e:
+                        task.status = TaskStatus.FAILED
+                        task.error  = str(e)
+                        self._persist(task)
+                        logger.error(f"[{queue.value.upper()}] FAIL {tool}/{task.task_id[:8]}: {e}")
+                    finally:
+                        setattr(self, counter_attr, getattr(self, counter_attr) - 1)
+                        task.completed_at = datetime.utcnow().isoformat()
+                        logger.info(
+                            f"[{queue.value.upper()}] DONE {tool}/{task.task_id[:8]} "
+                            f"| cpu={self._cpu_active}/{8} "
+                            f"gpu={self._gpu_active}/{3} "
+                            f"deg={self._degraded_active}/{4}"
+                        )
 
         asyncio.create_task(_run())
         return task
