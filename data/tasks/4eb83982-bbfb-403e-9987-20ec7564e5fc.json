@@ -1,0 +1,1 @@
+{"task_id": "4eb83982-bbfb-403e-9987-20ec7564e5fc", "tool": "alphafold3", "queue": "gpu", "status": "cancelled", "created_at": "2026-03-24T16:38:31.919106", "started_at": "2026-03-24T16:38:31.919677", "completed_at": null, "result": null, "error": null, "progress": 0, "progress_msg": "", "output_files": [], "updated_at": "2026-03-24T16:38:31.919717"}

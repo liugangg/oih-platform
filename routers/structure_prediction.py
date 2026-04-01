@@ -427,3 +427,124 @@ async def pesto_predict(req: PeSToRequest):
                 result.get("num_hotspots", 0), req.threshold, result.get("max_score", 0))
 
     return result
+
+
+# ─── ipSAE Interface Confidence Score ────────────────────────────────────────
+
+class IpSAERequest(BaseModel):
+    job_name: str = Field("ipsae_score", description="Job identifier")
+    af3_output_dir: str = Field(..., description="Path to AF3 output directory containing *_confidences.json and *_model.cif")
+    pae_cutoff: float = Field(10.0, description="PAE cutoff (default 10 for AF3)")
+    dist_cutoff: float = Field(10.0, description="Distance cutoff (default 10 for AF3)")
+
+
+@router.post("/ipsae_score", summary="Calculate ipSAE interface confidence for AF3 complex")
+async def ipsae_score(req: IpSAERequest):
+    """Calculate ipSAE interface confidence score for AF3 complex.
+
+    Use after AF3 validation to detect false positives — designs with high ipTM
+    but ipSAE=0.000 have no real interface. CPU-only, fast (~5s).
+
+    Input: AF3 output directory containing *_confidences.json and *_model.cif.
+    Output: ipSAE, ipSAE_d0chn, pDockQ, pDockQ2, LIS per chain pair.
+    """
+    import glob as _glob
+    import logging
+    logger = logging.getLogger("oih")
+
+    af3_dir = req.af3_output_dir.rstrip("/")
+    if not os.path.isdir(af3_dir):
+        raise HTTPException(status_code=400, detail=f"Directory not found: {af3_dir}")
+
+    # Auto-find confidences.json (exclude summary and seed/sample variants)
+    conf_files = [
+        f for f in _glob.glob(os.path.join(af3_dir, "*_confidences.json"))
+        if "summary" not in os.path.basename(f)
+    ]
+    if not conf_files:
+        conf_files = [
+            f for f in _glob.glob(os.path.join(af3_dir, "*/*_confidences.json"))
+            if "summary" not in os.path.basename(f) and "seed-" not in f
+        ]
+    if not conf_files:
+        raise HTTPException(status_code=400, detail=f"No *_confidences.json found in {af3_dir}")
+
+    # Auto-find model.cif (main model, not seed samples)
+    cif_files = [
+        f for f in _glob.glob(os.path.join(af3_dir, "*_model.cif"))
+        if "seed-" not in f and "sample-" not in f
+    ]
+    if not cif_files:
+        cif_files = [
+            f for f in _glob.glob(os.path.join(af3_dir, "*/*_model.cif"))
+            if "seed-" not in f and "sample-" not in f
+        ]
+    if not cif_files:
+        raise HTTPException(status_code=400, detail=f"No *_model.cif found in {af3_dir}")
+
+    conf_path = conf_files[0]
+    cif_path = cif_files[0]
+
+    # Output directory: try original dir first, fallback to /tmp
+    try:
+        test_file = os.path.join(af3_dir, ".ipsae_write_test")
+        with open(test_file, "w") as tf:
+            tf.write("test")
+        os.remove(test_file)
+        out_dir = af3_dir
+    except (PermissionError, OSError):
+        out_dir = f"/tmp/ipsae_results/{req.job_name}"
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    logger.info("[ipSAE] %s: conf=%s cif=%s out=%s",
+                req.job_name, os.path.basename(conf_path),
+                os.path.basename(cif_path), out_dir)
+
+    try:
+        from ipsae import IpsaeCalculator
+        calc = IpsaeCalculator(req.pae_cutoff, req.dist_cutoff)
+        result = calc.calculate(conf_path, cif_path, out_dir)
+    except Exception as e:
+        logger.error("[ipSAE] %s failed: %s", req.job_name, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"ipSAE calculation failed: {e}")
+
+    # Extract chain pair scores into a flat summary
+    chains = result["unique_chains"]
+    ipsae_scores = result["ipsae_scores"]
+    pdockq_scores = result["pdockq_scores"]
+    lis_scores = result["lis_scores"]
+    global_scores = result.get("global_scores", {})
+
+    chain_pairs = []
+    for c1 in chains:
+        for c2 in chains:
+            if c1 >= c2:
+                continue
+            chain_pairs.append({
+                "chain1": c1,
+                "chain2": c2,
+                "ipSAE": round(ipsae_scores["ipsae_d0res_asym"][c1][c2], 6),
+                "ipSAE_d0chn": round(ipsae_scores["ipsae_d0chn_asym"][c1][c2], 6),
+                "pDockQ": round(pdockq_scores["pDockQ"][c1][c2], 4),
+                "pDockQ2": round(pdockq_scores["pDockQ2"][c1][c2], 4),
+                "LIS": round(lis_scores[c1][c2], 4),
+            })
+
+    best = max(chain_pairs, key=lambda x: x["ipSAE"]) if chain_pairs else {}
+
+    logger.info("[ipSAE] %s: best %s-%s ipSAE=%.4f pDockQ2=%.4f LIS=%.4f",
+                req.job_name, best.get("chain1", "?"), best.get("chain2", "?"),
+                best.get("ipSAE", 0), best.get("pDockQ2", 0), best.get("LIS", 0))
+
+    return {
+        "status": "completed",
+        "job_name": req.job_name,
+        "chain_pairs": chain_pairs,
+        "best_pair": best,
+        "ipTM": global_scores.get("iptm", None),
+        "pTM": global_scores.get("ptm", None),
+        "output_dir": out_dir,
+        "confidences_file": conf_path,
+        "model_cif": cif_path,
+    }

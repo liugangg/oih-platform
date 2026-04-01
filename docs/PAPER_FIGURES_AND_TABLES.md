@@ -107,15 +107,41 @@ Include: PeSTo, extract_interface_residues, pesto_predict
 | EGFR | 0.759 | — | 19 | Multi-domain |
 | TROP2 | 0.422 | — | 0 | Flat surface, difficult |
 
-## Table 5 — Nectin-4 Complete Results (Best Case Study)
-| Design | ipTM | ranking_score | ipSAE | ipSAE_d0chn | pDockQ2 | LIS | Site | SASA | ADC |
-|--------|------|--------------|-------|-------------|---------|-----|------|------|-----|
-| **val_2** | **0.870** | **0.91** | **0.679** | **0.854** | **0.762** | 0.506 | B:K195 | 213.1 Å² | SMCC-NHS+MMAE ✅ |
-| val_4 | 0.780 | — | 0.523 | 0.742 | 0.534 | 0.389 | B:K195 | 214.2 Å² | SMCC-NHS+MMAE ✅ |
-| val_1 | 0.310 | — | — | — | — | — | — | — | — |
-| val_3 | 0.260 | — | — | — | — | — | — | — | — |
-| val_0 | 0.210 | — | — | — | — | — | — | — | — |
-Nectin-4 val_2 ipSAE=0.679 is the best across all targets (HER2 best=0.529, CD36 best=0.193)
+## Table 5 — Complete Validated Binder Results (All Targets)
+
+### Nectin-4 (Tier3, PeSTo PPI, PDB 4GJT)
+| Design | ipTM | ipSAE | ipSAE_d0chn | pDockQ2 | LIS | Site | SASA | ADC |
+|--------|------|-------|-------------|---------|-----|------|------|-----|
+| **val_2** | **0.870** | **0.679** | 0.854 | **0.762** | 0.506 | B:K195 | 213.1 Å² | SMCC-NHS+MMAE ✅ |
+| val_4 | 0.780 | 0.523 | 0.742 | 0.534 | 0.389 | B:K195 | 214.2 Å² | SMCC-NHS+MMAE ✅ |
+| val_1 | 0.310 | — | — | — | — | — | — | — |
+| val_3 | 0.260 | — | — | — | — | — | — | — |
+| val_0 | 0.210 | — | — | — | — | — | — | — |
+Novel binding site on D1-D2 domain (distinct from 4GJT antibody interface at D3-D4)
+
+### HER2 (Tier1, extract_interface from 1N8Z trastuzumab)
+| Design | ipTM | ipSAE | ipSAE_d0chn | pDockQ2 | LIS | Site | SASA | ADC |
+|--------|------|-------|-------------|---------|-----|------|------|-----|
+| **val_2** | **0.850** | **0.529** | 0.823 | 0.222 | 0.400 | A:K188 | 155.6 Å² | NHS-PEG4+MMAE ✅ |
+| val_0 | 0.830 | 0.485 | 0.803 | 0.189 | 0.347 | — | — | — |
+| val_1 | 0.700 | 0.238 | 0.701 | 0.051 | 0.176 | — | — | — |
+
+### EGFR (Tier1, extract_interface from 1YY9 cetuximab, Domain III)
+| Design | ipTM | ipSAE | ipSAE_d0chn | pDockQ2 | LIS | Site | SASA | ADC |
+|--------|------|-------|-------------|---------|-----|------|------|-----|
+| **val_0** | **0.520** | **0.190** | 0.461 | 0.220 | 0.253 | A:K38 | 171.8 Å² | NHS-PEG4+MMAE ✅ |
+| val_1 | 0.300 | 0.016 | 0.335 | 0.050 | 0.124 | — | — | — |
+| val_3 | 0.210 | 0.000 | 0.000 | 0.017 | 0.000 | — | — | — |
+| val_4 | 0.150 | 0.000 | 0.000 | 0.013 | 0.000 | — | — | — |
+| val_2 | 0.080 | 0.000 | 0.000 | 0.010 | 0.000 | — | — | — |
+Medium-difficulty target (PeSTo max=0.759). v2 wrong hotspot (domain I, ipTM=0.27) → v5 correct cetuximab hotspot (domain III, ipTM=0.52)
+
+### CD36 (Tier3, PeSTo PPI, PDB 5LGD)
+| Design | ipTM | ipSAE | ipSAE_d0chn | pDockQ2 | LIS | Site | SASA | ADC |
+|--------|------|-------|-------------|---------|-----|------|------|-----|
+| PeSTo v5 val_2 | 0.550 | 0.193 | 0.615 | 0.167 | — | K398 | 184.6 Å² | NHS-PEG4+MMAE ✅ |
+| DT3 best | 0.430 | 0.000 | 0.000 | 0.018 | 0.000 | — | — | false positive |
+B-cell epitope (DiscoTope3) ≠ PPI interface (PeSTo): ipSAE proves DT3 hotspots are non-binding
 
 ## Table 6 — Scoring Formula Evolution
 | Version | Formula | Best Result |
@@ -124,25 +150,27 @@ Nectin-4 val_2 ipSAE=0.679 is the best across all targets (HER2 best=0.529, CD36
 | v2 (PPI) | rag(0.30)+pesto(0.25)+conservation(0.20)+sasa(0.10)+electrostatics(0.15) | HER2 ipTM=0.86 |
 
 ## Table 6 — 7-Target Benchmark Summary
-| Target | PDB | Tier | PeSTo | Best ipTM | Best ipSAE | Pass Rate | ADC |
-|--------|-----|------|-------|-----------|-----------|-----------|-----|
-| HER2 | 1N8Z | 1 | 0.668 | 0.86 | 0.529 | 3/10 | ✅ |
-| CD36 | 5LGD | 3 | 0.865 | 0.55 | 0.193 | 0/25* | ✅† |
-| **Nectin-4** | **4GJT** | **3** | **0.966** | **0.870** | **0.679** | **2/5** | **✅** |
-| EGFR | 1YY9 | 1 | 0.759 | 0.270 | — | 0/1‡ | — |
-| TROP2 | 7PEE | 3 | 0.422 | 0.220 | — | 0/3‡ | — |
-| TrkA | 1HE7 | 3 | 0.999 | pending | — | — | — |
-| PD-L1 | 4ZQK | 1 | 0.994 | pending | — | — | — |
-*0/25 by ipTM≥0.6, but 1 design has ipSAE=0.193 (real binding signal)
-†ADC assembled on best design regardless of ipTM threshold
-‡AF3 partially completed, remaining designs pending
+| Target | PDB | Tier | Hotspot Method | Best ipTM | Best ipSAE | Pass Rate | ADC Site (binder) |
+|--------|-----|------|---------------|-----------|-----------|-----------|-------------------|
+| **Nectin-4** | **4GJT** | **3** | **PeSTo PPI (D1-D2 novel)** | **0.870** | **0.679** | **2/5** | **B:K195 ✅** |
+| HER2 | 1N8Z | 1 | extract_interface (trastuzumab) | 0.850 | 0.529 | 3/10 | A:K188 ✅ |
+| EGFR | 1YY9 | 1 | extract_interface (cetuximab) | 0.520 | 0.190 | 0/5* | A:K38 ✅ |
+| CD36 | 5LGD | 3 | PeSTo PPI | 0.550 | 0.193 | 0/5* | K398 ✅ |
+| TROP2 | 7PEE | 3 | PeSTo PPI | 0.220 | — | 0/3 | — |
+| TrkA | 1HE7 | 3 | PeSTo PPI | pending | — | — | — |
+| PD-L1 | 4ZQK | 1 | extract_interface (atezolizumab) | pending | — | — | — |
+*0/5 by ipTM≥0.6, but best has ipSAE>0.15 (genuine binding signal confirmed by ipSAE)
+ADC sites verified on binder chain only (antigen Lys excluded)
 
 ## Table 7 — Distillation Training Cases
-81 cases across 5 sessions, covering:
+90 cases across 6 sessions, covering:
 - Tool selection errors (epitope vs PPI vs pocket)
 - Pipeline failures and recovery
 - Scoring formula evolution
 - GPU scheduling optimization
+- Docker orphan process management
+- ADC conjugation site validation (binder chain only)
+- KNOWN_COMPLEXES chain verification
 
 ---
 

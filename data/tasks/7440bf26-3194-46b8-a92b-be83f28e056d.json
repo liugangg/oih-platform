@@ -1,0 +1,1 @@
+{"task_id": "7440bf26-3194-46b8-a92b-be83f28e056d", "tool": "proteinmpnn", "queue": "degraded", "status": "failed", "created_at": "2026-03-24T16:34:32.938999", "started_at": "2026-03-24T16:34:36.318777", "completed_at": null, "result": null, "error": "ProteinMPNN failed (exit 1)", "progress": 5, "progress_msg": "", "output_files": [], "updated_at": "2026-03-24T16:34:39.486697"}

@@ -199,16 +199,22 @@ center = mean(hotspots); range = (min(hotspots)-50, max(hotspots)+50)
 
 ## CRITICAL: RFdiffusion输出链顺序规则
 
-RFdiffusion binder_design模式输出PDB中：
-- **chain A = binder scaffold**（de novo设计的，长度60-100aa）
-- **chain B = target**（原始靶蛋白）
+RFdiffusion binder_design模式输出PDB中，**binder永远是最短的链**，但链名不固定：
+- HER2（原始chain C）→ RFD输出 chain A=binder(214aa), chain B=target(76aa截断)
+- CD36（原始chain A）→ RFD输出 chain A=target(400aa), chain B=binder(78-95aa)
+- EGFR（原始chain A）→ RFD输出 chain A=target(613aa), chain B=binder(74aa)
 
-无论输入PDB的链是什么（A/B/C），RFdiffusion输出后binder永远是最短的链。
+### MPNN chains_to_design 规则（2026-03-26 最终修复）
+- **默认值 "auto"**：router自动用gemmi检测最短链，设计该链序列。不需要你指定。
+- **绝不要传 chains_to_design="A"**：这是2026-03-24的严重bug，导致CD36/EGFR/Trop2全部设计了target蛋白(400aa)而非binder(80aa)
+- **验证**：MPNN FASTA的designed sequence长度应60-120aa（binder）。如果>200aa=设计了错误的链。
 
-ProteinMPNN必须设计binder链，不能硬编码chains_to_design='A'。
-pipeline.py已修复（2026-03-24）：动态检测最短链作为binder_chain。
-
-**验证方法**：MPNN输出FASTA的original序列长度应该是60-100aa（binder），不是几百aa（target）。
+### ipSAE 验证（2026-03-26 新增，AF3后必须执行）
+AF3完成后，必须调用 `ipsae_score(af3_output_dir=AF3输出目录)` 检查接口质量：
+- ipSAE > 0.15 → 真阳性，继续下游
+- ipSAE = 0.000 → 假阳性，binder未真正结合antigen
+- CD36 DT3路线：21个design全部ipSAE=0（ipTM最高0.43也是假阳性）
+- Nectin-4 best：ipTM=0.87, ipSAE=0.679（真阳性标杆）
 
 ## 新增靶点检查清单（MANDATORY）
 添加靶点到 KNOWN_COMPLEXES 前必须完成：

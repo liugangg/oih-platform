@@ -1,0 +1,1 @@
+{"task_id": "f689be95-7a1e-4e8e-ab69-106a7fca1754", "tool": "alphafold3", "queue": "gpu", "status": "failed", "created_at": "2026-03-26T12:44:36.886375", "started_at": null, "completed_at": null, "result": null, "error": "Server restarted while task was running", "progress": 0, "progress_msg": "", "output_files": [], "updated_at": "2026-03-27T13:57:09.416177"}

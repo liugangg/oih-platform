@@ -77,7 +77,7 @@ class RFdiffusionResult(BaseModel):
 class ProteinMPNNRequest(BaseModel):
     job_name: str
     input_pdb: str = Field(..., description="Path to input PDB file (backbone from RFdiffusion)")
-    chains_to_design: str = Field("A", description="Chain IDs to redesign e.g. 'A' or 'A,B'")
+    chains_to_design: str = Field("auto", description="Chain IDs to redesign. 'auto'=detect shortest chain (binder). Or explicit e.g. 'A' or 'A,B'")
     fixed_residues: Optional[str] = Field(None, description="Residue positions to keep fixed")
     num_sequences: int = Field(8, ge=1, le=100)
     sampling_temp: float = Field(0.1, ge=0.0, le=1.0, description="Sampling temperature")

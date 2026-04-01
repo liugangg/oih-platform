@@ -1,0 +1,287 @@
+[
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "AF3验证5/5失败，错误：Sub-task timed out after 1800s，ipTM=None",
+    "output": "## 分析\n超时不等于AF3本身失败。应先检查输出目录是否有CIF文件。val_0目录有771KB的CIF文件说明AF3实际跑完了，只是超过了1800s超时限制被误判为失败。rank2-5是因为GPU0满载，被路由到DEGRADED队列，AF3需要20GB VRAM但DEGRADED队列GPU显存不足导致OOM退出。\n\n## 修复方案\n1.修改pipeline.py将AF3超时改为动态无限等待，只有OOM/cancelled才判定失败。2.修改task_manager.py添加_NO_DEGRADED_TOOLS集合，AF3永不降级。3.读取val_0的ranking_scores.csv获取真实ipTM=0.48\n\n## 结果\n修复成功，v4任务已提交，AF3将正确等待GPU空闲"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Binder design pipeline使用P2Rank评分权重0.15",
+    "output": "## 分析\nP2Rank是小分子口袋检测工具，找的是深腔高封闭度的druggable pocket。蛋白binder设计需要的是中等凹度的平坦表面patch，不是小分子口袋。P2Rank高分位点可能反而不适合binder design。\n\n## 修复方案\n从binder评分公式移除P2Rank(0.15)，用PeSTo PPI interface prediction(0.25)替代\n\n## 结果\n新评分公式：rag(0.30)+pesto(0.25)+conservation(0.20)+sasa(0.10)+electrostatics(0.15)"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "CD36 BindCraft运行结果0 designs passed filters",
+    "output": "## 分析\nBindCraft内部filter chain(AF2 ipTM/pLDDT/contact quality)对CD36这种平坦表面靶点过严。0 pass不代表没有可用设计，只是AF2内部筛选全部拒绝。AF3评估可能给不同结果。\n\n## 修复方案\n1.降低BindCraft filter阈值重跑 2.把rejected设计手动送AF3验证 3.对CD36这种难靶点用RFdiffusion+PeSTo hotspot路线\n\n## 结果\n待验证。BindCraft filter过严是已知问题，Nature论文中对难靶点成功率也只有10%"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "CD36 binder设计，DiscoTope3预测hotspot A397-A400，RFdiffusion生成10个设计",
+    "output": "## 分析\nDiscoTope3预测的是B-cell epitope（免疫原性位点），不是蛋白-蛋白相互作用界面。天然抗体CDR loop结合模式与de novo binder完全不同。Baker lab从未用epitope工具选hotspot。应该先查文献找已知PPI interface，或用PeSTo预测PPI界面。\n\n## 修复方案\n1.用PeSTo替代DiscoTope3预测PPI界面 2.RAG搜索发现CLESH domain(93-120)是TSP-1实验验证界面 3.PeSTo发现A187-194为最强PPI区域(score 0.50-0.87)\n\n## 结果\nDiscoTope3 hotspot ipTM=0.33全败(0/10)，PeSTo和CLESH hotspot待验证。证明epitope≠PPI interface"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "DiffDock出现在binder design pipeline的Step 7",
+    "output": "## 分析\nDiffDock是小分子-蛋白对接工具，用于预测小分子在蛋白口袋中的结合构象。在蛋白binder设计pipeline中没有任何用途，浪费GPU时间(每次~10分钟)和占用GPU semaphore。\n\n## 修复方案\n从pipeline.py移除DiffDock步骤，设置run_diffdock_validation=False\n\n## 结果\n每次pipeline节省~10分钟GPU时间，commit 483fd4f"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GPU0有22469MB已用只剩86MB，GPU1有44996MB空闲，但AF3仍然失败",
+    "output": "## 分析\nAF3容器配置NVIDIA_VISIBLE_DEVICES=1，在容器内看到的是host GPU1。但task_manager的VRAM检查逻辑可能检查的是GPU0。GPU1有45GB完全够跑AF3(需要20GB)。根本原因是DEGRADED队列接受了AF3任务但显存不足。\n\n## 修复方案\n在task_manager.py添加_NO_DEGRADED_TOOLS={'alphafold3','bindcraft'}，VRAM不足时等待而非降级\n\n## 结果\nAF3任务现在会等待GPU1空闲，不再被路由到DEGRADED队列"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "PeSTo对PD-L1(4ZQK)预测max PPI score只有0.440",
+    "output": "## 分析\n4ZQK是PD-1/PD-L1复合物结构，PD-1占着PD-L1的结合界面。PeSTo预测的是'哪里还能形成新的PPI'，已被占的界面自然分数低。需要提取PD-L1单链重新跑PeSTo。\n\n## 修复方案\n提取4ZQK chain A(PD-L1单链)，重跑PeSTo\n\n## 结果\n单链PeSTo分数从0.440飙升到0.994，Y123/Y56/A121/M115是top hotspot"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "ProteinMPNN designed_chains=['A'] 对所有靶点",
+    "output": "## 分析\nRFdiffusion binder_design模式输出PDB中，chain顺序取决于输入PDB。HER2原始是chain C，RFdiff输出后binder=A(短链), target=B(长链)。但CD36/EGFR/PDL1等原始chain A的靶点，RFdiff输出后target=A(长), binder=B(短)。MPNN硬编码chains_to_design='A'导致设计了target蛋白而不是binder。273次MPNN全部设计了错误的链。\n\n## 修复方案\npipeline.py用gemmi动态检测最短链作为binder_chain，传给ProteinMPNN。不再硬编码'A'。\n\n## 结果\n修复后重跑5个靶点。HER2数据有效（chain A恰好是binder）。验证方法：MPNN FASTA original序列长度应是60-100aa(binder)不是几百aa(target)。commit c14eeee"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Qwen口袋选择静默失败，日志显示'Qwen selection failed: '错误信息为空，fallback到P2Rank默认pocket",
+    "output": "## 分析\nQwen3-14B默认开启thinking mode，API返回content:null（思考在reasoning字段），代码取msg['content']得到None。后续re.sub(pattern, '', None)抛出TypeError但str(TypeError())是空字符串所以日志里error为空。需要禁用thinking mode让Qwen直接返回JSON，同时加None保护。\n\n## 修复方案\n修改routers/pipeline.py _qwen_select_pocket()：1.请求体加'chat_template_kwargs': {'enable_thinking': False}禁用thinking。2.content = msg.get('content') or '' 防止None。3.若content为空尝试msg.get('reasoning_content')。4.except加exc_info=True输出完整traceback。5.加日志输出raw response方便调试。\n\n## 结果\n修复成功，Qwen返回429字符有效JSON：selected_pocket_id=1, hotspot_residues=[A2,A270,A279,A280,A281,A282], selection_reason完整。"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "RAG找到了文献残基编号但rag_score对所有pocket都是0.0，5个pocket的rag分数全为零",
+    "output": "## 分析\nRAG从文献提取纯数字残基编号如['505','310']，P2Rank口袋残基格式为['A505','A310']带链前缀。_compute_rag_score()用set交集比较，'505' != 'A505'所以永远无overlap。旧代码尝试给RAG残基加链前缀但逻辑不可靠（需要遍历所有链）。正确做法：比较时双方统一为纯数字。\n\n## 修复方案\n修改routers/pipeline.py _compute_rag_score()：比较前双方都lstrip字母字符统一为纯数字。def _to_num(r): return r.lstrip('ABCDE...xyz_:')。pocket_nums = set(_to_num(r) for r in pocket_residues)；rag_nums = set(_to_num(r) for r in rag_residues)；overlap = len(pocket_nums & rag_nums)。同时删除pipeline中冗余的链前缀扩展代码。\n\n## 结果\n修复成功，RAG残基编号可正确匹配P2Rank口袋残基，文献证据权重(0.3)可生效。"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "RAG搜索CD36返回了DiscoTope3预测相同的A397/A400区域",
+    "output": "## 分析\nRAG的query是'{target} binding site epitope'，搜到的是免疫学/epitope方向的文献。正确的query应该搜PPI interface而不是epitope。CD36的CLESH domain(93-120)是TSP-1结合界面，但RAG没搜到因为query词不对。\n\n## 修复方案\n修改RAG为两层搜索：Layer1搜'{target} protein complex co-crystal binding partner'(PPI interface)，Layer2才搜epitope。Layer1命中直接用，跳过DiscoTope3\n\n## 结果\nRAG pipeline已改为2层搜索，commit 48c81d1。CD36 CLESH E101/D106/E108/D109应该能被Layer1搜到"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "RFdiffusion3于2025.12开源，是否升级",
+    "output": "## 分析\nRFdiffusion3是原子级精度diffusion模型，比v1快10x，统一支持蛋白-蛋白/DNA/小分子设计。配套序列设计工具从ProteinMPNN改为LigandMPNN。但论文数据应用v1跑完保持一致性，升级放在GitHub release后。\n\n## 修复方案\n论文用v1数据，Discussion写成future work。数据跑完后一次性升级：RFdiffusion→RFD3, ProteinMPNN→LigandMPNN\n\n## 结果\n升级计划已记录"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "pocket_guided_binder_pipeline挂死在RAG搜索步骤，单worker uvicorn无响应，curl超时",
+    "output": "## 分析\n_rag_search_pocket_context()通过httpx.get('http://127.0.0.1:8080/api/v1/rag/search')调用本机RAG接口。uvicorn --workers 1时唯一worker阻塞在pipeline协程等待RAG HTTP响应，但RAG请求需要同一个worker处理→经典单线程自调用死锁。解决方案：绕过HTTP层直接调用Python函数。\n\n## 修复方案\n修改routers/pipeline.py _rag_search_pocket_context()：删除httpx HTTP调用，改为 from retrieval.rag_router import get_retriever; retriever = get_retriever(); papers = await retriever.retrieve(query, n_pubmed=6, n_biorxiv=3, n_local=4, years_back=5)。同时给所有内部httpx调用加trust_env=False防止代理干扰。\n\n## 结果\n修复成功，RAG步骤在2秒内完成，不再死锁。pipeline继续正常执行后续fpocket/P2Rank步骤。"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "val_0 ipTM=0.48，低于0.6阈值，5个设计全部未通过AF3验证",
+    "output": "## 分析\nipTM=0.48说明nanobody和HER2的结合预测置信度低，可能原因：1.hotspot残基选在了trastuzumab已占据的Domain IV表位，竞争性差。2.num_designs=10太少，只有50个backbone中5个被验证。3.RFdiffusion生成的backbone质量参差不齐。改进方向：换hotspot到Domain II新表位，增加num_designs，或降低阈值到0.5先让ADC步骤跑通。\n\n## 修复方案\n下一轮使用HER2 Domain II新表位hotspot，num_designs=50，阈值降至0.5\n\n## 结果\n待v4结果验证"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "左侧任务列表被50个ProteinMPNN子任务刷爆，用户体验极差",
+    "output": "## 分析\npipeline内部会并行/串行调用多个子工具，每个子工具任务单独出现在列表中导致UI混乱。应该将同一pipeline触发的子任务折叠在pipeline卡片下，只显示摘要。\n\n## 修复方案\n修改dashboard.html，同一时间窗口内的同类子任务折叠显示为摘要行，如'ProteinMPNN ×20 ✓20'\n\n## 结果\nUI整洁，子任务折叠正常"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "旧任务在API重启后自动恢复执行，GPU被orphan AF3进程占满",
+    "output": "## 分析\ntask_manager._load_history()从JSON文件加载任务状态。虽然running任务被标记为failed，但pipeline coroutine内部的子任务（AF3等）已经在docker容器内执行，不受API重启影响。docker restart不杀容器内子进程，docker stop也不一定杀GPU进程。\n\n## 修复方案\n1. docker kill（非stop/restart）杀容器+所有子进程 2. 手动修改所有task JSON status为cancelled 3. 确认nvidia-smi无GPU进程后再启动API\n\n## 结果\n需要docker kill+改JSON文件+确认GPU清空的完整三步才能彻底清理"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "选择binder设计的hotspot残基",
+    "output": "## 分析\n三种结合位点本质不同：1)B-cell epitope(免疫原性)=DiscoTope3/IEDB 2)PPI interface(蛋白-蛋白界面)=PeSTo/MaSIF 3)小分子口袋=fpocket/P2Rank。Baker lab用的是已知复合物界面提取或PatchDock残基，从未用epitope工具。正确优先级：文献实验验证>PeSTo PPI>序列保守性>DiscoTope3\n\n## 修复方案\n建立五维结合位点发现协议：RAG文献→PeSTo PPI→保守性→SASA→电荷。创建BINDER_DESIGN_WORKFLOW.md统一skill\n\n## 结果\n已部署PeSTo(ROC AUC=0.92)，7靶点全部跑完PPI预测，评分公式已更新"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Chemprop容器内python3指向3.10但所有包装在3.11路径下，import numpy报No module named",
+    "output": "## 分析\n容器基础镜像有python3.10和python3.11两个版本，默认symlink /usr/bin/python3→python3.10。pip install在python3.11路径下安装了所有包(torch/numpy/chemprop)。python3调用3.10找不到包。\n\n## 修复方案\ndocker exec oih-chemprop bash -c 'rm /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3'。永久修复：Dockerfile加RUN ln -sf /usr/bin/python3.11 /usr/bin/python3\n\n## 结果\npython3正确指向3.11，import成功"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "OIH平台和Gemini前端搞混，pip install到错误环境",
+    "output": "## 分析\n两个独立FastAPI服务使用不同Python环境。OIH: /data/oih/miniconda/bin/python (端口8080)。Gemini: /opt/oih-agent/fastapi/bin/python3 (端口8001)。往错误环境装包会浪费时间且不生效。\n\n## 修复方案\nOIH用/data/oih/miniconda/bin/pip install，Gemini前端不要动。两个服务重启命令不同。\n\n## 结果\n包装在正确环境，服务正常运行"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "systemd oih-api.service与nohup手动启动冲突，kill后进程被自动拉起",
+    "output": "## 分析\nsystemd的oih-api.service设置了Restart=always，kill进程后systemd检测到进程退出→自动重启旧版本代码→新修改不生效。两种启动方式冲突。\n\n## 修复方案\n重启前先systemctl stop oih-api停掉systemd管理，再用nohup手动启动\n\n## 结果\n新代码生效，不被systemd覆盖"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "AF3容器报错：JAX has removed implicit dtype promotion",
+    "output": "## 分析\nJAX版本升级后移除了隐式dtype提升，AF3代码中有numpy/jax混合dtype操作不兼容新版JAX。这是容器内JAX版本与AF3代码的兼容性问题。\n\n## 修复方案\n检查oih-alphafold3容器的JAX版本，降级JAX到兼容版本，或在docker-compose.yml中固定JAX版本\n\n## 结果\n待修复"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "3Dmol.js viewer报404无法加载CIF文件",
+    "output": "## 分析\ndashboard用/static/outputs/...路径fetch CIF文件，但main.py没有mount /static到/data/oih目录。需要添加StaticFiles mount让文件可通过HTTP访问。\n\n## 修复方案\nmain.py添加app.mount('/outputs', StaticFiles(directory='/data/oih/outputs'))，dashboard路径改为path.replace('/data/oih/outputs','/outputs')\n\n## 结果\nCIF文件HTTP 200，3Dmol正常渲染"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Protein 3D viewer 在 cartoon 模式下瞬间消失，surface/stick 模式正常显示",
+    "output": "## 分析\ncartoon 模式额外调用了 addSurface(VDW)，VDW surface 计算量极大，大蛋白（HER2复合物几千残基）会导致 WebGL 计算超时，viewer 崩溃消失。surface/stick 模式没有这个调用所以正常。根本原因：不应该在 cartoon 模式自动加载 VDW surface，surface 渲染应该留给用户手动触发。\n\n## 修复方案\n删除 cartoon 模式中的 v.addSurface($3Dmol.SurfaceType.VDW, {opacity:0.08, color:#00d4ff}) 这一行，只保留 setStyle cartoon + zoomTo + render\n\n## 结果\ncartoon 模式稳定显示，不再崩溃"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "AF3被路由到DEGRADED队列后OOM exit 1",
+    "output": "## 分析\nGPU0被Qwen占满(22469/23028MB)，GPU1有45GB空闲但task_manager的VRAM检查检测到GPU1临时不足(可能其他任务占用)→路由到DEGRADED队列→AF3需要20GB VRAM但DEGRADED队列是CPU+RAM fallback→OOM crash。\n\n## 修复方案\n添加_NO_DEGRADED_TOOLS={'alphafold3','bindcraft'}，VRAM不足时每60s重试检查GPU1，永不降级\n\n## 结果\nAF3等待GPU空闲后正常运行，不再DEGRADED"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Diagnose the issue and provide the fix.",
+    "input": "After FastAPI restart, GPU VRAM still occupied by orphaned docker exec processes from previous session. Semaphore thinks GPU is free (0 running), but nvidia-smi shows 44GB/45GB used. New AF3 submissions block indefinitely.",
+    "output": "## 分析\ndocker exec spawns processes INSIDE the container — killing FastAPI does NOT kill them. Task manager must actively clean up container processes on restart, not just mark tasks as failed.\n\n## 修复方案\nAdded _kill_orphaned_gpu_processes() to task_manager._load_history(). On startup, if any GPU tasks were running/pending, kills matching processes (run_alphafold, jackhmmer, nhmmer, run_inference, gmx, etc.) in GPU containers via docker exec kill -9. Also found 9 zombie jackhmmer processes from Mar24 accumulating in oih-alphafold3.\n\n## 结果\nipTM_before=N/A (blocking bug, not accuracy), ipTM_after=N/A"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GROMACS mdrun无法检测GPU，nvidia-smi正常但gmx报GPU detection failed",
+    "output": "## 分析\n容器设置了NVIDIA_VISIBLE_DEVICES=1但GROMACS不读这个环境变量，它依赖CUDA_VISIBLE_DEVICES。nvidia-smi能看到GPU是因为nvidia-container-runtime已注入，但CUDA运行时需要CUDA_VISIBLE_DEVICES=0来选择设备。\n\n## 修复方案\n所有gmx mdrun命令前加CUDA_VISIBLE_DEVICES=0\n\n## 结果\nGROMACS正确检测GPU，mdrun使用GPU加速"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "JAX容器(AF3/BindCraft)挂载host cuda lib64路径后GPU检测失败",
+    "output": "## 分析\nJAX自带完整的CUDA库(jaxlib内含cudnn/cublas等)。挂载host的/usr/lib/x86_64-linux-gnu或/usr/local/cuda/lib64会覆盖JAX自带的库版本，导致版本不匹配→GPU初始化失败。\n\n## 修复方案\nJAX容器的docker-compose中删除所有host cuda lib64 volume mount，只保留数据目录mount\n\n## 结果\nJAX正常检测GPU，AF3/BindCraft可以运行"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "NVIDIA_VISIBLE_DEVICES=1设置了但容器内nvidia-smi显示GPU1",
+    "output": "## 分析\nNVIDIA_VISIBLE_DEVICES=1告诉nvidia-container-runtime只把host GPU1传入容器。容器内nvidia-smi显示的是重新编号后的设备，应该只有一块GPU且index=0。如果显示index=1说明环境变量没生效或者被覆盖。\n\n## 修复方案\n确认docker-compose.yml中environment设置NVIDIA_VISIBLE_DEVICES=1，容器内所有命令用device=0\n\n## 结果\n容器内正确看到单GPU device=0"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "容器内使用gpu_id=1导致GPU检测失败",
+    "output": "## 分析\ndocker-compose设置NVIDIA_VISIBLE_DEVICES=1，将host GPU1映射为容器内device 0。容器内只能看到一块GPU，索引只有0。使用gpu_id=1会报device not found。\n\n## 修复方案\n所有容器内命令使用gpu_id=0或device=0，永远不用1\n\n## 结果\nGPU正确识别，计算正常运行"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "AF3验证超时1800s但输出目录已有完整CIF文件",
+    "output": "## 分析\nAF3对蛋白复合物预测可能需要30-60分钟（取决于序列长度和num_seeds）。固定timeout=1800s不够灵活。val_0实际在~1920s完成但被超时机制误杀。输出目录已有完整CIF+confidences+ranking_scores。\n\n## 修复方案\n新增_wait_for_af3_task()无限等待函数，每30s poll，仅在OOM/exit1/cancelled/连续10次同错时判定失败\n\n## 结果\nAF3不再因超时被误判失败"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Agent Chat同步端点需要600s才返回",
+    "output": "## 分析\nQwen3-14B thinking_budget=2048时推理一轮需要30-60s，20轮最多~500s。同步HTTP请求默认超时会导致客户端断开。\n\n## 修复方案\ncurl调用加--max-time 600，前端fetch设置600s超时\n\n## 结果\n完整等待agent完成，不会超时断开"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "DiffDock容器无法检测GPU，CUDA_VISIBLE_DEVICES未设置",
+    "output": "## 分析\nDiffDock内部代码直接调用torch.cuda而不检查NVIDIA_VISIBLE_DEVICES。容器设置了NVIDIA_VISIBLE_DEVICES=1但DiffDock框架忽略它，需要额外设置CUDA_VISIBLE_DEVICES=0。\n\n## 修复方案\ndocker-compose.yml中DiffDock容器environment增加CUDA_VISIBLE_DEVICES=0\n\n## 结果\nDiffDock正确使用GPU"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GET请求的query params没有传递给工具",
+    "output": "## 分析\nqwen_agent.py的tool executor对GET请求只构造了URL path但没有附加query parameters。如rag_search的query/n_pubmed参数应该作为?query=xxx&n_pubmed=5传递。\n\n## 修复方案\n修复executor：query_params = {k:v for k,v in arguments.items() if f'{{{k}}}' not in url_template}，GET请求时附加到URL\n\n## 结果\nGET请求正确传递query params，rag_search等工具正常工作"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GROMACS MDP文件提前生成导致tc-grps写入错误的组名",
+    "output": "## 分析\nMDP文件在make_ndx之前就生成了，此时还不知道实际的蛋白+配体合并组名。make_ndx的输出才能确定正确的tc-grps值。\n\n## 修复方案\nMDP文件延迟生成：先运行make_ndx获取组名，再写入NVT/NPT/MD的MDP文件\n\n## 结果\nMDP中tc-grps与index.ndx中的组名一致"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GROMACS NVT步骤报'group Protein Non-Protein not found'",
+    "output": "## 分析\n蛋白配体体系中gmx make_ndx生成的组名取决于配体的残基名(如UNL/LIG等)。tc-grps硬编码为'Protein Non-Protein'但实际组名可能是'Protein_UNL Water_and_ions'。\n\n## 修复方案\nmake_ndx后解析index.ndx获取实际合并组名，动态写入MDP文件的tc-grps字段\n\n## 结果\ntc-grps正确匹配，NVT/NPT/MD正常运行"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GROMACS mdrun报deprecated parameter警告",
+    "output": "## 分析\nGROMACS 2024移除了一些旧参数：nstxtcout改为nstxout-compressed，ns_type=grid已废弃(默认即grid)，dispdivcorr改为DispCorr。使用旧参数名会报warning或error。\n\n## 修复方案\n更新MDP模板：nstxtcout→nstxout-compressed，删除ns_type=grid，dispdivcorr→DispCorr\n\n## 结果\n无deprecated警告，MDP参数全部正确"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GROMACS mdrun静默失败但返回码为0",
+    "output": "## 分析\ngmx mdrun某些错误只写入.log文件但返回码为0（如Fmax=inf、积分不稳定）。仅检查返回码不够，必须验证输出文件(em.gro/nvt.gro/npt.gro/md.xtc)实际存在。\n\n## 修复方案\n每步mdrun后检查输出文件存在性，不存在立即raise RuntimeError并附.log最后20行\n\n## 结果\nEM失败时立即报错，不会让后续步骤在缺失文件上继续"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "GROMACS配体坐标在editconf后位置错误导致EM Fmax=inf",
+    "output": "## 分析\n旧代码在editconf -c（居中重新定义box）之后才合并ligand.gro到complex.gro。editconf重新居中了蛋白坐标但配体还在原始PDB坐标系→蛋白配体重叠→原子碰撞→Fmax=inf→EM发散。\n\n## 修复方案\n在pdb2gmx之后、editconf之前合并protein.gro+LIG_GMX.gro→complex.gro，拓扑也在此时patch(#include LIG_GMX.itp + LIG 1)\n\n## 结果\neditconf同时居中蛋白和配体，EM正常收敛"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "MPNN FASTA解析失败导致AF3验证0/0",
+    "output": "## 分析\nProteinMPNN输出的FASTA格式：第一条是原始序列（无sample=标记），后续才是设计序列（有sample=N标记）。旧代码没有正确跳过原始序列和解析score字段。\n\n## 修复方案\n新增_parse_mpnn_fasta()：跳过无sample/T标记的首条，解析score=字段，返回[{sequence,score,header}]列表\n\n## 结果\n正确提取设计序列，AF3验证top5"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "PubChem返回的分子名称字段不一致",
+    "output": "## 分析\nPubChem API的PropertyTable返回的字段名可能是IUPACName或无IUPACName（某些分子没有IUPAC名）。直接访问IUPACName可能KeyError。\n\n## 修复方案\nfallback链：先尝试IUPACName，失败则用CID字符串作为名称\n\n## 结果\n所有分子都能获取到名称标识"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Qwen agent thinking_budget默认256太低，多步工具调用推理不足",
+    "output": "## 分析\nQwen3-14B需要足够的思考token来规划多步工具调用（如fetch_pdb→fpocket→dock需要理解3个工具的输入输出关系）。256 token不够规划复杂workflow。\n\n## 修复方案\nqwen_agent.py中_get_thinking_budget()默认值从256提高到2048。pipeline类任务4096，命名工具2048，动作词1024。\n\n## 结果\nQwen正确规划多步workflow，工具路径传递准确"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Qwen agent同一工具失败7次导致整个会话超时",
+    "output": "## 分析\nchemprop容器python3指向错误版本→每次调用都失败→Qwen不知道跳过→反复重试同一工具→消耗全部20轮→超时。需要自动检测连续失败并跳过。\n\n## 修复方案\nqwen_agent.py记录每个工具连续失败次数，>=2次自动跳过并告知Qwen该工具暂不可用，继续后续流程\n\n## 结果\n连续失败后自动跳过，不浪费agent轮次"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "fpocket输出的box坐标从summary文件解析错误",
+    "output": "## 分析\nfpocket的summary文件格式复杂，直接提取坐标容易parse失败。pocket_atm.pdb文件包含pocket的原子坐标，从ATOM记录直接计算质心更可靠。\n\n## 修复方案\n改从pocket_atm.pdb的ATOM记录计算box center（坐标平均值）和box size（坐标范围+padding）\n\n## 结果\nbox坐标准确对应binding pocket"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "ipTM=0.48低于0.6阈值，nanobody设计质量差",
+    "output": "## 分析\nipTM<0.5表明预测的nanobody-HER2复合物结构置信度很低。可能原因：1.hotspot S310/T311/Q313/L317在Domain IV trastuzumab表位区域，竞争性差 2.num_designs=10太少 3.RFdiffusion backbone质量不够。\n\n## 修复方案\n换hotspot到Domain II新表位(K505/E558/D561)，增加num_designs到50，降低阈值到0.5先跑通pipeline\n\n## 结果\n待v4验证"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "routers中os.path.basename()剥离了完整路径导致文件找不到",
+    "output": "## 分析\nfetch_pdb返回/data/oih/outputs/fetch_pdb/5XWR.pdb，但router对input_pdb做basename()得到5XWR.pdb，再拼接/data/oih/inputs/5XWR.pdb→文件不存在。upstream工具返回的是outputs目录，不是inputs。\n\n## 修复方案\n改为优先使用原始路径：src = req.input_pdb if os.path.exists(req.input_pdb) else f'/data/oih/inputs/{os.path.basename(req.input_pdb)}'\n\n## 结果\n5个受影响router全部修复，pipeline路径传递正确"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "任务状态存内存，服务重启后所有任务丢失",
+    "output": "## 分析\nTaskManager._tasks是内存dict，uvicorn重启后dict清空→所有running/pending任务无法查询→pipeline断链。\n\n## 修复方案\ntask_manager.py添加持久化：每次状态变更写入data/tasks/{task_id}.json，启动时扫描目录恢复历史（running/pending标记为failed）\n\n## 结果\n重启后任务可查询，running任务标记为failed提示用户重新提交"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "新工具只注册了router但Qwen无法调用",
+    "output": "## 分析\nOIH平台三处注册规则：1.router定义执行逻辑 2.qwen_tools.py定义工具schema(Qwen看到的) 3.qwen_agent.py TOOL_MAP映射工具名到router函数。缺任何一处都会导致工具不可用。\n\n## 修复方案\n每次新增工具必须同时修改三个文件：routers/*.py + tool_definitions/qwen_tools.py + qwen_agent.py TOOL_MAP\n\n## 结果\n工具正确注册，Qwen可以发现和调用"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "FastAPI启动后内部httpx请求Qwen(8002端口)返回502",
+    "output": "## 分析\nshell环境有http_proxy=http://127.0.0.1:7890。FastAPI内部用httpx调用localhost:8002(Qwen vLLM)，httpx默认读取环境代理→请求被发到Clash代理→Clash不认识内网地址→502。\n\n## 修复方案\n启动uvicorn时加NO_PROXY='*' no_proxy='*'前缀，确保所有内网请求不走代理\n\n## 结果\n内部API调用正常，Qwen响应正确"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "curl localhost请求返回502或connection refused",
+    "output": "## 分析\nshell的http_proxy环境变量会让curl把localhost请求也发到代理。Clash代理不处理localhost→502。\n\n## 修复方案\n所有curl内网请求加--noproxy '*'\n\n## 结果\n直连localhost，请求正常"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "AutoDock-GPU对接box坐标需要手动指定",
+    "output": "## 分析\n用户只提供PDB+SMILES，不知道结合位点坐标。box_center和box_size应该从fpocket输出的pocket_atm.pdb自动提取，不需要用户手动指定。\n\n## 修复方案\n从fpocket结果的pocket atom coordinates计算box center(质心)和box size(+8Å padding)\n\n## 结果\n自动生成.gpf文件，npts/gridcenter/box_size全部自动化"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "AutoDock-GPU的mk_prepare_receptor.py遇到NAG残基报unknown residue错误",
+    "output": "## 分析\nmk_prepare_receptor.py只识别标准氨基酸，糖基化修饰(NAG/FUC/MAN)等HETATM残基不在其字典中→parse失败。需要fallback到更宽容的工具。\n\n## 修复方案\n预检测PDB中非标准HETATM残基，有则跳过mk_prepare_receptor直接用obabel或MGLTools的prepare_receptor4.py转换。加--delete_residues去除非标准残基。\n\n## 结果\n受体准备成功，AutoDock-GPU正常运行"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Chemprop --devices 1被误解为device index 1",
+    "output": "## 分析\n--devices是PyTorch Lightning参数，值1表示'使用1个GPU设备'而不是'使用第1号GPU'。设备选择由CUDA_VISIBLE_DEVICES控制。--devices 2表示用2块GPU做数据并行。\n\n## 修复方案\ntrain用--accelerator gpu --devices 1（1块GPU），predict用--accelerator cpu（不需要GPU）\n\n## 结果\n正确使用单GPU训练，CPU预测"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Chemprop predict使用--accelerator gpu在RTX4090上OOM",
+    "output": "## 分析\nChemprop predict对小批量(3-10个分子)开GPU反而更慢且可能OOM。predict不需要反向传播，CPU完全够用。train才需要GPU。\n\n## 修复方案\nrouter中predict调用加--accelerator cpu，task_manager中chemprop_predict加入_CPU_TOOLS走CPU队列\n\n## 结果\nCPU预测3个分子5秒完成，不再OOM"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "ESMFold安装失败，openfold依赖不完整",
+    "output": "## 分析\nESMFold依赖openfold，但openfold的依赖链复杂且部分包版本冲突(特别是pytorch/cuda版本)。在RTX4090上编译openfold的CUDA kernel也有兼容性问题。\n\n## 修复方案\n放弃ESMFold，使用AlphaFold3替代结构预测功能。ESMFold标记为abandoned。\n\n## 结果\n不再尝试安装ESMFold"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Diagnose the issue and provide the fix.",
+    "input": "MPNN standalone router hardcoded chains_to_design='A', only pipeline.py had the auto-detect fix",
+    "output": "## 分析\nBug fixes must propagate to ALL call sites. Pipeline.py fix was incomplete — standalone MPNN router was still broken. The 'auto' default ensures no caller can accidentally hardcode the wrong chain.\n\n## 修复方案\nChanged MPNN router default from 'A' to 'auto', added gemmi-based shortest-chain detection in protein_design.py. Schema default updated. Now both standalone calls and pipeline calls auto-detect binder chain.\n\n## 结果\nipTM_before=0.193 (false: MPNN redesigned 400aa target), ipTM_after=pending (CD36 pesto_v5_fixed2 AF3 running)"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "Vina-GPU在RTX4090上segfault",
+    "output": "## 分析\nVina-GPU使用OpenCL kernel，RTX4090的OpenCL驱动可能有兼容性问题导致kernel执行segfault。这是GPU架构兼容性问题。\n\n## 修复方案\n暂时搁置Vina-GPU，使用GNINA和AutoDock-GPU作为替代对接引擎\n\n## 结果\nVina-GPU标记为abandoned，不再尝试"
+  },
+  {
+    "instruction": "You are an AI drug discovery platform agent. Analyze the tool result and decide next steps.",
+    "input": "用户问有多少容器在运行，Qwen回答说没有这个工具",
+    "output": "## 分析\nQwen只能使用 qwen_tools.py 中定义的工具。health接口有容器状态但没有对应工具让Qwen调用。需要新增 get_system_status 工具封装health接口。\n\n## 修复方案\n新增get_system_status工具（router+qwen_tools+TOOL_MAP三处），重启服务\n\n## 结果\nQwen可以直接查询并返回容器状态"
+  }
+]
