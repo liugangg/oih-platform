@@ -69,22 +69,51 @@ DiscoTope3 + IEDB + RAG → known_epitope_override → RFdiffusion → ProteinMP
 - RAG 搜索分两层：Layer 1 (PPI共晶/突变) → Layer 2 (epitope fallback)
 - CD36 教训：DiscoTope3 选了表面暴露残基 A397/A400，但应该用 CLESH domain (93-120)
 
-## MPNN Chain 检测（2026-03-24 严重 bug）
+## MPNN Chain 检测（2026-03-26 最终修复）
 
 RFdiffusion binder_design 输出中链顺序不固定：
-- 最短链 = binder scaffold (60-100aa)
+- 最短链 = binder scaffold (60-120aa)
 - 最长链 = target protein (100-600aa)
 
-**绝不能硬编码 chains_to_design='A'**。
-必须用 gemmi 检测最短链作为 binder chain。
+**chains_to_design 已改为默认 "auto"**。Router 自动用 gemmi 检测最短链。
+调用 `proteinmpnn_sequence_design` 时不需要指定 chains_to_design，留默认即可。
 
-| 靶点 | RFdiff chain A | RFdiff chain B | MPNN 应设计 |
-|------|---------------|---------------|------------|
-| HER2 (原始C链) | binder 214aa | target 85aa | A ✅ (碰巧对) |
-| CD36 (原始A链) | target 400aa | binder 83aa | B ❌→修复 |
-| EGFR (原始A链) | target 613aa | binder ~80aa | B ❌→修复 |
+| 靶点 | RFdiff chain A | RFdiff chain B | MPNN auto 检测 |
+|------|---------------|---------------|----------------|
+| HER2 (原始C链) | binder 214aa | target 76aa | A ✅ (最短) |
+| CD36 (原始A链) | target 400aa | binder 78-95aa | B ✅ (最短) |
+| EGFR (原始A链) | target 613aa | binder 74aa | B ✅ (最短) |
+| Trop2 (原始A链) | target 274aa | binder ~80aa | B ✅ (最短) |
 
-验证方法：MPNN FASTA original 序列长度 60-100aa = 正确(binder)，几百aa = 错误(target)
+验证方法：MPNN FASTA designed sequence 长度 60-120aa = 正确(binder)，>200aa = 错误(target)
+
+## ipSAE 接口验证（2026-03-26 新增）
+
+AF3验证完成后，**必须调用 ipsae_score** 检查接口质量：
+- ipSAE > 0.15 = 真阳性（binder确实结合了antigen）
+- ipSAE = 0.000 = 假阳性（AF3给了ipTM但实际无接口接触）
+- 调用方式：`ipsae_score(af3_output_dir="AF3输出目录路径")`
+- CD36 DT3路线教训：21个design的ipTM=0.12-0.43，但ipSAE全部=0.000
+
+## 序列提取安全规则（2026-03-27 bug fix）
+
+从 PDB 提取序列时，**必须指定 chain ID**，否则会把多条链拼接成一条：
+- 错误：`_extract_sequence_from_pdb(pdb)` → 400aa target + 69aa binder = 469aa 拼接
+- 正确：`_extract_sequence_from_pdb(pdb, chain_id='B')` → 69aa binder
+- 影响：61 个 pre-fix 设计全部提交了错误序列给 AF3
+- 验证：AF3 input JSON 中 binder 链应为 60-120aa，如果 >200aa 一定是拼接错误
+
+## GPU 资源泄漏防护（2026-03-27 关键修复）
+
+`docker exec` 在容器内创建的进程 parent 是 containerd-shim，**不是 FastAPI**。
+task_manager 完成任务后释放 semaphore，但容器内的 python/jackhmmer 进程可能还在跑，占 44GB VRAM。
+
+**已修复**：每个 GPU 任务完成后（无论成功/失败），自动 kill 容器内匹配进程。
+两层防护：
+1. `_cleanup_container_after_task()` — 任务完成后立即清理
+2. `_kill_orphaned_gpu_processes()` — FastAPI 重启时清理历史残留
+
+如果发现 GPU 满但没有 running task → `nvidia-smi` 看 PID → `docker exec <container> kill -9 <pid>`
 
 ### 历史教训
 - IgFold 误用于 de novo binder → pLDDT 全部 0.4-12.6 → 0 个候选进入 AF3

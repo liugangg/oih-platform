@@ -194,13 +194,35 @@ async def run_proteinmpnn(req: ProteinMPNNRequest):
         task.progress_msg = "Running ProteinMPNN sequence design..."
 
         _pdb = req.input_pdb if os.path.exists(req.input_pdb) else f"/data/oih/inputs/{os.path.basename(req.input_pdb)}"
+
+        # ── Auto-detect binder chain (shortest chain = binder) ──────────
+        # 2026-03-24 blood lesson: hardcoding 'A' redesigned the 400aa
+        # target instead of the 80aa binder for CD36/EGFR/Trop2/Nectin-4.
+        _chain = req.chains_to_design
+        if _chain == "auto":
+            try:
+                import gemmi
+                st = gemmi.read_structure(_pdb)
+                chains = [
+                    (c.name, sum(1 for r in c if r.entity_type == gemmi.EntityType.Polymer))
+                    for c in st[0]
+                ]
+                chains.sort(key=lambda x: x[1])
+                _chain = chains[0][0]  # shortest = binder
+                import logging
+                logging.getLogger("oih").info(
+                    "[MPNN] Auto-detected binder chain: %s (%d res) from %s",
+                    _chain, chains[0][1], os.path.basename(_pdb))
+            except Exception:
+                _chain = "A"  # fallback
+
         cmd = [
             "python3", "/app/ProteinMPNN/protein_mpnn_run.py",
             "--pdb_path", _pdb,
             "--out_folder", f"/data/oih/outputs/{req.job_name}/proteinmpnn",
             "--num_seq_per_target", str(req.num_sequences),
             "--sampling_temp", str(req.sampling_temp),
-            "--pdb_path_chains", req.chains_to_design,
+            "--pdb_path_chains", _chain,
             "--batch_size", "1",
         ]
         if req.fixed_residues:

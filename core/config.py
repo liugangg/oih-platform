@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # OIH API base URL — derived from SERVER_HOST if not set
     OIH_API_BASE: str = ""
 
+    # LLM Backend: "local" | "anthropic" | "openai" | "deepseek"
+    LLM_PROVIDER: str = os.environ.get("OIH_LLM_PROVIDER", "local")
+    LLM_API_KEY: str = os.environ.get("OIH_LLM_API_KEY", "")
+    LLM_MODEL: str = os.environ.get("OIH_LLM_MODEL", "")       # empty = provider default
+    LLM_BASE_URL: str = os.environ.get("OIH_LLM_BASE_URL", "")  # custom endpoint
+
     # Shared data volume (mounted in all containers)
     DATA_ROOT: str = "/data/oih"
     INPUT_DIR: str = "/data/oih/inputs"

@@ -1,0 +1,102 @@
+"""
+OIH Platform API Gateway
+统一接入层：让 Qwen3-14B 调用完整生物计算工具链
+Server: 192.168.31.23 | GPU0: Qwen | GPU1: Compute Tools
+"""
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import uvicorn
+import logging
+
+from routers import (
+    ml_tools,
+    structure_prediction,
+    protein_design,
+    pocket_analysis,
+    molecular_docking,
+    md_simulation,
+    pipeline,
+    tasks,
+)
+from core.task_manager import task_manager
+from core.config import settings
+from qwen_agent import agent_router
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="OIH Bio-Computing API",
+    description="Unified API for AlphaFold3, RFdiffusion, ProteinMPNN, BindCraft, Fpocket, P2Rank, Vina-GPU, AutoDock-GPU, GNINA, DiffDock, GROMACS",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register all routers
+app.include_router(structure_prediction.router, prefix="/api/v1/structure",    tags=["Structure Prediction"])
+app.include_router(protein_design.router,       prefix="/api/v1/design",       tags=["Protein Design"])
+app.include_router(pocket_analysis.router,      prefix="/api/v1/pocket",       tags=["Pocket Analysis"])
+app.include_router(molecular_docking.router,    prefix="/api/v1/docking",      tags=["Molecular Docking"])
+app.include_router(md_simulation.router,        prefix="/api/v1/md",           tags=["MD Simulation"])
+app.include_router(pipeline.router,             prefix="/api/v1/pipeline",     tags=["Full Pipeline"])
+app.include_router(ml_tools.router,          prefix="/api/v1/ml",           tags=["ML Tools"])
+app.include_router(tasks.router,                prefix="/api/v1/tasks",        tags=["Task Management"])
+app.include_router(agent_router,               prefix="/api/v1/agent",        tags=["AI Agent"])
+
+
+@app.get("/")
+async def root():
+    return {
+        "platform": "OIH Bio-Computing Platform",
+        "version": "1.0.0",
+        "server": "192.168.31.23",
+        "gpu_layout": {"GPU0": "Qwen3-14B LLM", "GPU1": "Compute Tools"},
+        "tools": [
+            "alphafold3", "rfdiffusion", "proteinmpnn", "bindcraft",
+            "fpocket", "p2rank", "vina-gpu", "autodock-gpu",
+            "gnina", "diffdock", "gromacs"
+        ],
+        "docs": "/docs",
+        "tool_definitions": "/api/v1/tool_definitions",
+    }
+
+
+@app.get("/api/v1/tool_definitions")
+async def get_tool_definitions():
+    """返回 OpenAI Function Calling 格式的工具定义，供 Qwen3-14B 直接加载"""
+    from tool_definitions.qwen_tools import ALL_TOOLS
+    return {"tools": ALL_TOOLS, "count": len(ALL_TOOLS)}
+
+
+@app.get("/health")
+async def health_check():
+    from core.docker_client import check_all_containers
+    container_status = await check_all_containers()
+    return {
+        "status": "ok",
+        "task_queue": task_manager.queue_size(),
+        "containers": container_status,
+    }
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc), "type": type(exc).__name__}
+    )
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False, workers=1)

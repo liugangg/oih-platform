@@ -24,6 +24,13 @@ SKILL_MAP = {
     "igfold":      "IGFOLD_WORKFLOW.md",
     "tool_scope":  "TOOL_SCOPE_RULES.md",
     "binder_design": "BINDER_DESIGN_WORKFLOW.md",
+    "conversation_rules": "CONVERSATION_RULES.md",
+    "customer_service": "CUSTOMER_SERVICE.md",
+    "domain_knowledge": "DOMAIN_KNOWLEDGE.md",
+    "matplotlib_figures": "MATPLOTLIB_FIGURES.md",
+    "pymol_rendering": "PYMOL_RENDERING.md",
+    "rag": "RAG_WORKFLOW.md",
+    "paper_metrics": "PAPER_METRICS_WORKFLOW.md",
 }
 
 KEYWORD_SKILL_MAP = {
@@ -49,6 +56,16 @@ KEYWORD_SKILL_MAP = {
     "binder_design": ["binder design", "hotspot", "binding site", "where to bind", "target analysis",
                        "interface", "de novo binder", "pocket scoring", "tier classification",
                        "domain truncation", "6D", "热点", "结合位点", "靶点分析", "域截取"],
+    "domain_knowledge": ["什么是", "原理", "解释", "科普", "知识", "概念", "what is", "explain",
+                          "how does", "mechanism", "principle", "ipTM", "pLDDT", "RMSD"],
+    "matplotlib_figures": ["matplotlib", "图表", "plot", "figure", "chart", "画图", "柱状图",
+                           "散点图", "热图", "heatmap", "可视化", "visualization"],
+    "pymol_rendering": ["pymol", "渲染", "render", "结构图", "蛋白图", "cartoon", "surface",
+                        "structure image", "结构可视化"],
+    "rag": ["文献", "论文", "literature", "pubmed", "paper", "检索", "搜索文献", "search paper",
+            "bioRxiv", "知识库", "knowledge base"],
+    "paper_metrics": ["metrics", "paper data", "tsv", "论文数据", "指标提取", "binder_len", "antigen_len",
+                      "ipSAE", "pDockQ", "extract metrics", "验证结果", "all_designs"],
 }
 
 def load_skill(skill_name: str) -> str:

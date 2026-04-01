@@ -36,13 +36,21 @@ docker exec oih-proteinmpnn python3 /app/ProteinMPNN/protein_mpnn_run.py \
 验证结果：4条序列，长度1115残基，11秒完成 ✅
 
 ### 2. 指定设计链（多链复合物只设计部分链）
+
+**⚠️ 2026-03-26 规则：使用API调用时，chains_to_design 留默认 "auto"。**
+Router会自动检测最短链（=binder）。不要硬编码 "A"。
+
 ```bash
+# 直接docker exec时，必须手动确认binder是哪条链：
+# 先检查：python3 -c "import gemmi; [print(c.name, sum(1 for r in c)) for c in gemmi.read_structure('complex.pdb')[0]]"
+# 最短链 = binder = 要设计的链
 docker exec oih-proteinmpnn python3 /app/ProteinMPNN/protein_mpnn_run.py \
   --pdb_path /data/oih/inputs/complex.pdb \
-  --pdb_path_chains "A" \
+  --pdb_path_chains "B" \
   --out_folder /data/oih/outputs/proteinmpnn/ \
   --num_seq_per_target 8 \
   --sampling_temp 0.1
+# 验证：FASTA第一条序列长度应为60-120aa(binder)，不是几百aa(target)
 ```
 
 ### 3. 固定部分残基（保留活性位点/关键残基）

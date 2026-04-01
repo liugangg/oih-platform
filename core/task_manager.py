@@ -95,6 +95,26 @@ _NO_DEGRADED_TOOLS: frozenset = frozenset({
 })
 
 
+# ─── Tool → Container mapping (for cancel/kill) ─────────────────────────────
+
+_TOOL_CONTAINER: Dict[str, str] = {
+    "alphafold3":   "oih-alphafold3",
+    "rfdiffusion":  "oih-rfdiffusion",
+    "proteinmpnn":  "oih-proteinmpnn",
+    "bindcraft":    "oih-bindcraft",
+    "gnina":        "oih-gnina",
+    "diffdock":     "oih-diffdock",
+    "gromacs":      "oih-gromacs",
+    "esm":          "oih-esm",
+    "discotope3":   "oih-discotope3",
+    "igfold":       "oih-igfold",
+    "chemprop":     "oih-chemprop",
+    "fpocket":      "oih-fpocket",
+    "p2rank":       "oih-p2rank",
+    "autodock-gpu": "oih-autodock-gpu",
+}
+
+
 # ─── Task dataclass ───────────────────────────────────────────────────────────
 
 @dataclass
@@ -112,6 +132,8 @@ class Task:
     progress_msg: str = ""
     input_params: Dict = field(default_factory=dict)
     output_files: List[str] = field(default_factory=list)
+    _asyncio_task: Optional[Any] = field(default=None, repr=False)
+    _container: Optional[str] = field(default=None, repr=False)
 
     def to_dict(self) -> Dict:
         return {
@@ -332,6 +354,7 @@ class TaskManager:
         """
         queue = await self._resolve_queue(tool)
         task  = self.create_task(tool, input_params, queue)
+        task._container = _TOOL_CONTAINER.get(tool)
         sem, counter_attr = self._sem_and_counter(queue)
 
         # AF3 gets an additional exclusive lock so only 1 AF3 task runs at a time,
@@ -341,6 +364,9 @@ class TaskManager:
         async def _run():
             async with af3_lock:
                 async with sem:
+                    # Check if cancelled while waiting for semaphore
+                    if task.status == TaskStatus.CANCELLED:
+                        return
                     # Increment active counter inside the semaphore
                     setattr(self, counter_attr, getattr(self, counter_attr) + 1)
                     task.status     = TaskStatus.RUNNING
@@ -354,11 +380,22 @@ class TaskManager:
                     )
                     try:
                         result         = await coro_fn(task)
+                        # Don't overwrite CANCELLED status
+                        if task.status == TaskStatus.CANCELLED:
+                            return
                         task.result    = result
                         task.status    = TaskStatus.COMPLETED
                         task.progress  = 100
                         self._persist(task)
+                    except asyncio.CancelledError:
+                        if task.status != TaskStatus.CANCELLED:
+                            task.status = TaskStatus.CANCELLED
+                            task.error = "Cancelled by user"
+                            self._persist(task)
+                        logger.info(f"[{queue.value.upper()}] CANCELLED {tool}/{task.task_id[:8]}")
                     except Exception as e:
+                        if task.status == TaskStatus.CANCELLED:
+                            return
                         task.status = TaskStatus.FAILED
                         task.error  = str(e)
                         self._persist(task)
@@ -373,7 +410,8 @@ class TaskManager:
                             f"deg={self._degraded_active}/{4}"
                         )
 
-        asyncio.create_task(_run())
+        aio_task = asyncio.create_task(_run())
+        task._asyncio_task = aio_task
         return task
 
     async def cancel_task(self, task_id: str) -> bool:
@@ -382,11 +420,56 @@ class TaskManager:
             return False
         if task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
             return False  # already finished
+
         task.status = TaskStatus.CANCELLED
         task.completed_at = datetime.utcnow().isoformat()
         task.error = "Cancelled by user"
         self._persist(task)
+
+        # Cancel the asyncio task (interrupts await coro_fn)
+        if task._asyncio_task and not task._asyncio_task.done():
+            task._asyncio_task.cancel()
+
+        # Kill processes inside the Docker container
+        if task._container:
+            await self._kill_container_processes(task._container, task.tool)
+
+        logger.info(f"[CANCEL] {task.tool}/{task.task_id[:8]} — "
+                     f"asyncio={'cancelled' if task._asyncio_task else 'n/a'}, "
+                     f"container={task._container or 'n/a'}")
         return True
+
+    async def _kill_container_processes(self, container: str, tool: str):
+        """Kill running processes inside a Docker container for the given tool."""
+        # Map tool to its main process pattern for targeted kill
+        kill_patterns = {
+            "alphafold3":  "alphafold",
+            "rfdiffusion": "inference",
+            "proteinmpnn": "protein_mpnn",
+            "bindcraft":   "bindcraft",
+            "gnina":       "gnina",
+            "diffdock":    "diffdock",
+            "gromacs":     "gmx",
+            "esm":         "esm",
+            "discotope3":  "discotope",
+            "igfold":      "igfold",
+            "chemprop":    "chemprop",
+        }
+        pattern = kill_patterns.get(tool, tool)
+        try:
+            kill_cmd = (
+                f"for pid in $(ps aux | grep '{pattern}' | grep -v grep | awk '{{print $2}}'); "
+                f"do kill -9 $pid 2>/dev/null; done"
+            )
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "exec", container, "bash", "-c", kill_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(proc.communicate(), timeout=10)
+            logger.info(f"[CANCEL] Killed processes in {container} matching '{pattern}'")
+        except Exception as e:
+            logger.warning(f"[CANCEL] Failed to kill processes in {container}: {e}")
 
 
 # ─── Singleton ────────────────────────────────────────────────────────────────

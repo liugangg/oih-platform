@@ -363,23 +363,40 @@ def _parse_mpnn_fasta(fasta_path: str) -> list:
     return results
 
 
-def _extract_sequence_from_pdb(pdb_path: str) -> str:
-    """Extract first chain's protein sequence from PDB ATOM records (CA atoms)."""
+def _extract_sequence_from_pdb(pdb_path: str, chain_id: str = None) -> str:
+    """Extract protein sequence from PDB ATOM records (CA atoms).
+
+    Args:
+        pdb_path: Path to PDB file.
+        chain_id: Specific chain to extract. If None, extracts the FIRST chain
+                  encountered (not all chains concatenated).
+
+    2026-03-27 bug fix: old code iterated all chains without filtering,
+    concatenating target(400aa) + binder(69aa) = 469aa as one sequence.
+    Now strictly extracts one chain at a time.
+    """
     seq = []
     seen = set()
+    first_chain = None
     try:
         with open(pdb_path) as f:
             for line in f:
                 if line.startswith("ATOM") and line[12:16].strip() == "CA":
+                    chain = line[21]
+                    # Lock to first chain encountered, or user-specified chain
+                    if first_chain is None:
+                        first_chain = chain_id or chain
+                    if chain != first_chain:
+                        continue
                     resname = line[17:20].strip()
                     resi = line[22:27].strip()
-                    chain = line[21]
                     key = (chain, resi)
                     if key not in seen:
                         seen.add(key)
                         seq.append(_AA3TO1.get(resname, "X"))
     except Exception as e:
-        logger.warning("_extract_sequence_from_pdb(%s) failed: %s", pdb_path, e)
+        logger.warning("_extract_sequence_from_pdb(%s, chain=%s) failed: %s",
+                       pdb_path, chain_id, e)
     return "".join(seq)
 
 
@@ -1938,6 +1955,30 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
                     if i < top_n - 1:
                         await asyncio.sleep(5)
 
+                # ── ipSAE verification (detect false positives) ──
+                from routers.structure_prediction import ipsae_score as _ipsae, IpSAERequest as _IpSAEReq
+                for d in validated_designs:
+                    if d.get("af3_structure_path") and d.get("iptm") is not None:
+                        try:
+                            ipsae_result = await _ipsae(_IpSAEReq(
+                                job_name=f"{req.job_name}_ipsae_{d['rank']}",
+                                af3_output_dir=d["af3_structure_path"],
+                            ))
+                            # Take max ipSAE across chain pairs
+                            pairs = ipsae_result.get("chain_pairs", [])
+                            d["ipsae"] = max((p.get("ipSAE", 0) for p in pairs), default=0)
+                            d["ipsae"] = round(d["ipsae"], 4)
+                            logger.info("[binder_pipeline] Design %d: ipTM=%.3f, ipSAE=%.4f",
+                                        d["rank"], d["iptm"], d["ipsae"])
+                            # ipSAE=0 with decent ipTM → false positive
+                            if d["ipsae"] < 0.01 and d.get("passed_validation"):
+                                d["passed_validation"] = False
+                                d["confidence"] = "false_positive"
+                                logger.warning("[binder_pipeline] Design %d: ipSAE=0 → false positive!", d["rank"])
+                        except Exception as e:
+                            d["ipsae"] = None
+                            logger.warning("[binder_pipeline] ipSAE failed for design %d: %s", d["rank"], e)
+
                 # Sort validated designs by ipTM descending
                 validated_designs.sort(
                     key=lambda x: x["iptm"] if x["iptm"] is not None else -1,
@@ -1955,6 +1996,7 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
                     "total_tested": len(validated_designs),
                     "passed": len(passed_list),
                     "best_iptm": best["iptm"] if best else None,
+                    "best_ipsae": best.get("ipsae") if best else None,
                     "best_sequence": best["sequence"] if best else None,
                 }
         else:
@@ -2027,10 +2069,13 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
                 sasa_result = await _wait_for_task(sasa_ref.task_id, timeout=300)
                 results["steps"]["freesasa"] = sasa_result
 
-                # Filter SASA > 40 Å², sort descending, take top 3
+                # Filter: binder chain only + SASA > 40 Å²
+                # ADC payload must be conjugated to binder, NOT antigen
                 all_sites = sasa_result.get("conjugation_sites", [])
+                _binder_ch = _binder_chain  # detected at MPNN step (shortest chain in RFD output)
                 filtered_sites = [
-                    s for s in all_sites if float(s.get("sasa", 0)) > 40.0
+                    s for s in all_sites
+                    if float(s.get("sasa", 0)) > 40.0 and s.get("chain", "") == _binder_ch
                 ]
                 filtered_sites.sort(key=lambda s: float(s.get("sasa", 0)), reverse=True)
                 top_sites = filtered_sites[:3]
@@ -3120,6 +3165,27 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
                     if i < top_n - 1:
                         await asyncio.sleep(5)
 
+                # ── ipSAE verification (detect false positives) ──
+                from routers.structure_prediction import ipsae_score as _ipsae2, IpSAERequest as _IpSAEReq2
+                for d in validated:
+                    if d.get("af3_dir") and d.get("iptm") is not None:
+                        try:
+                            ipsae_r = await _ipsae2(_IpSAEReq2(
+                                job_name=f"{req.job_name}_ipsae_{d['rank']}",
+                                af3_output_dir=d["af3_dir"],
+                            ))
+                            pairs = ipsae_r.get("chain_pairs", [])
+                            d["ipsae"] = round(max((p.get("ipSAE", 0) for p in pairs), default=0), 4)
+                            logger.info("[pocket_guided] Design %d: ipTM=%.3f, ipSAE=%.4f",
+                                        d["rank"], d["iptm"], d["ipsae"])
+                            if d["ipsae"] < 0.01 and d.get("passed"):
+                                d["passed"] = False
+                                d["confidence"] = "false_positive"
+                                logger.warning("[pocket_guided] Design %d: ipSAE=0 → false positive!", d["rank"])
+                        except Exception as e:
+                            d["ipsae"] = None
+                            logger.warning("[pocket_guided] ipSAE failed for design %d: %s", d["rank"], e)
+
                 validated.sort(key=lambda x: x["iptm"] if x["iptm"] is not None else -1, reverse=True)
                 passed_list = [d for d in validated if d.get("passed")]
                 best = validated[0] if validated else None
@@ -3128,6 +3194,7 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
                     "total_tested": len(validated),
                     "passed": len(passed_list),
                     "best_iptm": best["iptm"] if best else None,
+                    "best_ipsae": best.get("ipsae") if best else None,
                     "best_sequence": best["sequence"] if best else None,
                 }
             else:
@@ -3223,8 +3290,10 @@ async def pocket_guided_binder_pipeline(req: PocketGuidedBinderPipelineRequest):
                 ))
                 sasa_result = await _wait_for_task(sasa_ref.task_id, timeout=300)
                 results["steps"]["freesasa"] = sasa_result
+                # Filter: binder chain only + SASA > 40 Å² (ADC payload on binder, not antigen)
+                _bc = _binder_chain2  # detected at MPNN step
                 filtered = [s for s in sasa_result.get("conjugation_sites", [])
-                            if float(s.get("sasa", 0)) > 40.0]
+                            if float(s.get("sasa", 0)) > 40.0 and s.get("chain", "") == _bc]
                 filtered.sort(key=lambda s: float(s.get("sasa", 0)), reverse=True)
                 top_sites = filtered[:3]
                 adc_design["conjugation_sites"] = top_sites
