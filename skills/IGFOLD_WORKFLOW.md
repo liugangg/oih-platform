@@ -35,7 +35,7 @@ ProteinMPNN (50-100 sequences) → ESM2 PPL filter (PPL < 15) → 50
 
 ## pLDDT 质量期望（按 Target Tier）
 - **Tier 1 hotspots**（已知复合物界面残基）→ pLDDT > 70 预期，通过率高
-- **Tier 3 hotspots**（计算预测表位）→ pLDDT 40-70 常见，需更多设计数量
+- **Tier 2 hotspots**（计算预测表位）→ pLDDT 40-70 常见，需更多设计数量
 
 ## ⚠️ IgFold 只适用于抗体/纳米抗体序列
 - IgFold 内部使用 AntiBERTy，只在抗体序列上训练

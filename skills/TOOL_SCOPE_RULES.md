@@ -34,7 +34,7 @@ Qwen 必须在调用前判断工具是否适用。
 extract_interface_residues → RFdiffusion → ProteinMPNN → ESM2 → AF3
 ```
 
-### 无已知结构（Tier 3，新靶点）
+### 无已知结构（Tier 2，新靶点）
 ```
 DiscoTope3 + IEDB + RAG → known_epitope_override → RFdiffusion → ProteinMPNN → ESM2 → AF3
 ```
