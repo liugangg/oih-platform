@@ -1,18 +1,18 @@
-# Vina-GPU 2.1 & GNINA 对接工作流（已验证）
+# Vina-GPU 2.1 & GNINA Docking Workflow (Verified)
 
-## 工具信息
-- Vina-GPU容器：oih-vina-gpu，命令：vina_gpu（AutoDockVina-GPU 2.1）
-- GNINA容器：oih-gnina，命令：gnina（深度学习CNN打分）
-- GPU：NVIDIA_VISIBLE_DEVICES=1 → 容器内device 0
+## Tool Information
+- Vina-GPU container: oih-vina-gpu, command: vina_gpu (AutoDockVina-GPU 2.1)
+- GNINA container: oih-gnina, command: gnina (deep learning CNN scoring)
+- GPU: NVIDIA_VISIBLE_DEVICES=1 → device 0 inside the container
 
-## 何时用Vina-GPU vs GNINA vs AutoDock-GPU
-| 工具 | 适用场景 |
+## When to Use Vina-GPU vs GNINA vs AutoDock-GPU
+| Tool | Use Case |
 |------|------|
-| Vina-GPU 2.1 | 快速筛选，已知口袋坐标，标准对接 |
-| GNINA | 通用最佳，CNN重打分，精度更高，输出SDF |
-| AutoDock-GPU | 需要精确自由能，大规模虚拟筛选 |
+| Vina-GPU 2.1 | Fast screening, known pocket coordinates, standard docking |
+| GNINA | Best general-purpose, CNN rescoring, higher accuracy, outputs SDF |
+| AutoDock-GPU | Precise free energy calculations, large-scale virtual screening |
 
-## Vina-GPU命令
+## Vina-GPU Command
 ```bash
 docker exec oih-vina-gpu vina_gpu \
   --receptor /data/oih/inputs/<job>/receptor.pdbqt \
@@ -24,9 +24,9 @@ docker exec oih-vina-gpu vina_gpu \
   --exhaustiveness 8 \
   --thread 8000
 ```
-输出格式：PDBQT，解析affinity行
+Output format: PDBQT; parse affinity lines
 
-## GNINA命令
+## GNINA Command
 ```bash
 docker exec oih-gnina gnina \
   --receptor /data/oih/inputs/<receptor>.pdb \
@@ -39,23 +39,23 @@ docker exec oih-gnina gnina \
   --autobox_add 4 \
   --device 0
 ```
-输出格式：SDF，解析CNNscore和affinity
+Output format: SDF; parse CNNscore and affinity
 
-## 配体准备（两者相同）
+## Ligand Preparation (same for both)
 ```bash
-# SMILES → pdbqt（容器内obabel）
+# SMILES to pdbqt (obabel inside container)
 obabel -:"<SMILES>" --gen3d -O ligand.pdbqt -h
 ```
 
-## ⚠️ 注意事项
-- Vina-GPU：receptor需预先转换为pdbqt格式
-- GNINA：receptor直接用PDB，无需转换 ✅
-- GNINA输出SDF比PDBQT更易解析和可视化
-- smart_dock路由：有坐标→Vina-GPU，无坐标→DiffDock盲对接
+## Notes
+- Vina-GPU: receptor must be pre-converted to pdbqt format
+- GNINA: receptor can use PDB directly, no conversion needed
+- GNINA SDF output is easier to parse and visualize than PDBQT
+- smart_dock routing: with coordinates → Vina-GPU; without coordinates → DiffDock blind docking
 
 <!-- AUTO_SYNC_FROM_CLAUDE_MD -->
-## ⚠️ 注意事项（自动同步自 CLAUDE.md）
+## Notes (auto-synced from CLAUDE.md)
 
-- 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
+- Inside the container NVIDIA_VISIBLE_DEVICES=1; always use device=0 / gpu_id=0 (do not use 1)
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->

@@ -65,7 +65,7 @@ def print_gpu_info():
         sys.exit(1)
 
 
-SYSTEM_PROMPT = "你是OIH生物计算平台的AI助手。根据用户的生物信息学需求，分析问题并调用合适的工具。"
+SYSTEM_PROMPT = "You are the AI assistant for the OIH bio-computing platform. Analyze user bioinformatics requests and invoke the appropriate tools."
 
 
 def format_to_chatml(entry):

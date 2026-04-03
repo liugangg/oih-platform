@@ -1,10 +1,10 @@
 """
 Three-Queue Concurrency Test
 ============================
-验证 TaskManager 三队列并发控制：
-  - 发送 N 个 fpocket 请求（CPU queue, limit=8）
-  - 实时轮询 /health 记录峰值并发数
-  - 断言：peak_cpu_active <= 8
+Verify TaskManager three-queue concurrency control:
+  - Submit N fpocket requests (CPU queue, limit=8)
+  - Poll /health in real-time to record peak concurrency
+  - Assert: peak_cpu_active <= 8
 
 Usage:
   python tests/test_queue_concurrency.py [--n 10] [--api http://localhost:8080]

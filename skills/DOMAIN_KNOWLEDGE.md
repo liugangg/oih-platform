@@ -1,414 +1,414 @@
-# 领域专家知识库 — 计算药物发现
+# Domain Expert Knowledge Base — Computational Drug Discovery
 
-本文档是 OIH 平台 AI 助手的核心知识来源。回答客户问题时优先使用本文档的信息。
+This document is the core knowledge source for the OIH platform AI assistant. Prioritize information from this document when answering customer questions.
 
 ---
 
-## 1. 蛋白质结构预测
+## 1. Protein Structure Prediction
 
 ### AlphaFold3
-- DeepMind 开发，2024 年发布，Nature 论文
-- 可预测：蛋白质单体、蛋白-蛋白复合物、蛋白-配体、蛋白-核酸、蛋白-离子
-- 输入：氨基酸序列（FASTA）或 PDB ID
-- 输出：3D 结构（CIF 格式）+ 置信度分数
-- 关键指标：
-  - **pLDDT**（0-100）：每个残基的局部置信度。>90 原子级精度，70-90 骨架可信，<50 可能是无序区
-  - **pTM**（0-1）：整体结构的可信度
-  - **ipTM**（0-1）：界面/复合物预测质量。≥0.75 高置信，0.6-0.75 中等，<0.6 不可靠
-  - **ipSAE**（0-1）：界面对齐误差。≥0.15 真实结合，=0 假阳性
-- 典型耗时：小蛋白 5-10 分钟，大复合物 20-40 分钟
-- 局限性：无序区域预测不准，全新折叠可能不可靠，需要实验验证
+- Developed by DeepMind, published in 2024, Nature paper
+- Can predict: protein monomers, protein-protein complexes, protein-ligand, protein-nucleic acid, protein-ion
+- Input: amino acid sequence (FASTA) or PDB ID
+- Output: 3D structure (CIF format) + confidence scores
+- Key metrics:
+  - **pLDDT** (0-100): per-residue local confidence. >90 atomic-level accuracy, 70-90 backbone reliable, <50 likely disordered region
+  - **pTM** (0-1): overall structure confidence
+  - **ipTM** (0-1): interface/complex prediction quality. >=0.75 high confidence, 0.6-0.75 moderate, <0.6 unreliable
+  - **ipSAE** (0-1): interface alignment error. >=0.15 true binding, =0 false positive
+- Typical runtime: small proteins 5-10 min, large complexes 20-40 min
+- Limitations: inaccurate prediction for disordered regions, novel folds may be unreliable, experimental validation required
 
 ### ESM2
-- Meta AI 开发的蛋白质语言模型（650M 参数）
-- 用途：序列嵌入、伪困惑度评分（PPL）、零样本突变效果预测
-- PPL < 15 表示序列自然，PPL > 15 可能有问题
-- ESM-1v：点突变扫描，预测突变对蛋白功能的影响
+- Protein language model developed by Meta AI (650M parameters)
+- Uses: sequence embeddings, pseudo-perplexity scoring (PPL), zero-shot mutation effect prediction
+- PPL < 15 indicates natural sequence, PPL > 15 may be problematic
+- ESM-1v: point mutation scanning, predicts the effect of mutations on protein function
 
 ---
 
-## 2. 蛋白质设计
+## 2. Protein Design
 
 ### RFdiffusion
-- David Baker 实验室开发（Nature 2023）
-- 原理：扩散模型，从噪声中生成蛋白骨架结构
-- 模式：
-  - **binder design**：设计能结合靶标的蛋白质
-  - **scaffold design**：设计特定功能的蛋白支架
-  - **motif scaffolding**：将功能基序嵌入新的蛋白骨架
-- 关键参数：
-  - hotspot_residues：指定靶标上的结合位点残基
-  - num_designs：生成设计数量（通常 10-50）
-  - binder_length：设计蛋白长度（通常 70-100 aa）
-- 注意：hotspot 必须空间聚集（<15Å），分散的 hotspot 会导致极慢
-- 输出：PDB 骨架文件（只有 CA/C/N/O，没有侧链）
+- Developed by David Baker's lab (Nature 2023)
+- Principle: diffusion model, generates protein backbone structures from noise
+- Modes:
+  - **binder design**: designs proteins that bind to a target
+  - **scaffold design**: designs protein scaffolds with specific functions
+  - **motif scaffolding**: embeds functional motifs into new protein backbones
+- Key parameters:
+  - hotspot_residues: specifies binding site residues on the target
+  - num_designs: number of designs to generate (typically 10-50)
+  - binder_length: designed protein length (typically 70-100 aa)
+- Note: hotspots must be spatially clustered (<15A), dispersed hotspots cause extremely slow runs
+- Output: PDB backbone files (only CA/C/N/O, no side chains)
 
 ### ProteinMPNN
-- Baker 实验室开发的反向折叠模型
-- 输入：蛋白骨架结构（来自 RFdiffusion 或实验结构）
-- 输出：氨基酸序列（可生成多条候选序列）
-- 原理：给定 3D 骨架坐标，预测最可能折叠成该结构的序列
-- 关键参数：temperature（0.1=保守，0.5=多样）
-- 通常为每个骨架生成 8-10 条序列
+- Inverse folding model developed by Baker's lab
+- Input: protein backbone structure (from RFdiffusion or experimental structure)
+- Output: amino acid sequences (can generate multiple candidate sequences)
+- Principle: given 3D backbone coordinates, predicts the sequence most likely to fold into that structure
+- Key parameters: temperature (0.1=conservative, 0.5=diverse)
+- Typically generates 8-10 sequences per backbone
 
 ### BindCraft
-- 一体化 binder 设计（集成骨架+序列+优化）
-- 基于 JAX，GPU 要求较高（~16GB VRAM）
-- 适合快速原型设计
+- All-in-one binder design (integrates backbone + sequence + optimization)
+- Based on JAX, requires significant GPU resources (~16GB VRAM)
+- Suitable for rapid prototyping
 
 ### IgFold
-- 抗体/纳米抗体序列 → 3D 结构快速预测
-- 输出 pRMSD（不是 pLDDT），转换：pseudo_pLDDT = 100 - pRMSD * 20
-- 适合评估设计的抗体序列的可折叠性
+- Antibody/nanobody sequence to 3D structure rapid prediction
+- Outputs pRMSD (not pLDDT), conversion: pseudo_pLDDT = 100 - pRMSD * 20
+- Suitable for evaluating foldability of designed antibody sequences
 
 ---
 
-## 3. 分子对接
+## 3. Molecular Docking
 
-### 对接原理
-分子对接预测小分子配体与蛋白受体的结合模式（binding pose）和结合亲和力（binding affinity）。
+### Docking Principles
+Molecular docking predicts the binding mode (binding pose) and binding affinity of small molecule ligands with protein receptors.
 
-### 三种对接工具
+### Three Docking Tools
 
-#### GNINA（推荐精度最高）
-- 基于 CNN 评分函数的 GPU 加速对接
-- 继承 AutoDock Vina 的搜索算法，替换评分函数为深度学习 CNN
-- 输出：结合构象 + CNN score（0-1）+ 亲和力（kcal/mol）
-- CNN score > 0.7 通常表示可靠的结合预测
-- 亲和力 < -7 kcal/mol 通常表示有显著结合
-- 在 PDBbind 基准测试上优于 Vina
-- 适用：需要高精度的靶标-配体结合预测
+#### GNINA (Recommended, Highest Accuracy)
+- GPU-accelerated docking based on CNN scoring function
+- Inherits AutoDock Vina's search algorithm, replaces scoring function with deep learning CNN
+- Output: binding conformation + CNN score (0-1) + affinity (kcal/mol)
+- CNN score > 0.7 typically indicates reliable binding prediction
+- Affinity < -7 kcal/mol typically indicates significant binding
+- Outperforms Vina on PDBbind benchmark
+- Suitable for: high-accuracy target-ligand binding prediction
 
 #### AutoDock-GPU
-- AutoDock 4 的 GPU 加速版本
-- 经典 Lamarckian 遗传算法 + 力场评分
-- 需要预处理：PDB → PDBQT 转换 + 网格计算（autogrid4）
-- 评分：结合自由能（kcal/mol），越负越好
-- 适用：大规模虚拟筛选（速度快）
+- GPU-accelerated version of AutoDock 4
+- Classic Lamarckian genetic algorithm + force field scoring
+- Requires preprocessing: PDB to PDBQT conversion + grid calculation (autogrid4)
+- Scoring: binding free energy (kcal/mol), more negative is better
+- Suitable for: large-scale virtual screening (fast)
 
 #### AutoDock Vina
-- 最广泛使用的分子对接工具
+- Most widely used molecular docking tool
 - Trott & Olson, J Comput Chem 2010
-- 搜索算法：Iterated Local Search + Monte Carlo
-- 评分函数：经验力场（范德华 + 氢键 + 溶剂化 + 熵损失）
-- 关键参数：
-  - center_x/y/z：对接盒中心坐标
-  - size_x/y/z：盒子大小（通常 20-30 Å）
-  - exhaustiveness：搜索彻底性（默认 8，建议 32）
-  - num_modes：输出构象数
-- 亲和力单位：kcal/mol，越负越好
-  - < -10：非常强结合
-  - -7 到 -10：强结合
-  - -5 到 -7：中等结合
-  - > -5：弱结合
-- 局限：不能准确预测绝对结合自由能，适合排序
+- Search algorithm: Iterated Local Search + Monte Carlo
+- Scoring function: empirical force field (van der Waals + hydrogen bonds + solvation + entropy penalty)
+- Key parameters:
+  - center_x/y/z: docking box center coordinates
+  - size_x/y/z: box size (typically 20-30 A)
+  - exhaustiveness: search thoroughness (default 8, recommended 32)
+  - num_modes: number of output conformations
+- Affinity unit: kcal/mol, more negative is better
+  - < -10: very strong binding
+  - -7 to -10: strong binding
+  - -5 to -7: moderate binding
+  - > -5: weak binding
+- Limitations: cannot accurately predict absolute binding free energy, suitable for ranking
 
 #### DiffDock
-- 扩散模型对接（MIT，ICLR 2023）
-- 无需指定结合口袋（盲对接）
-- 适合不知道结合位点的情况
-- 输出置信度分数
+- Diffusion model docking (MIT, ICLR 2023)
+- No need to specify binding pocket (blind docking)
+- Suitable when the binding site is unknown
+- Outputs confidence scores
 
-### 对接最佳实践
-1. **准备受体**：去除水分子和非必要 HETATM，添加氢原子
-2. **准备配体**：生成 3D 构象，分配 Gasteiger 电荷
-3. **确定对接盒**：使用 fpocket/P2Rank 检测的口袋中心
-4. **运行对接**：推荐 GNINA（精度）或 AutoDock-GPU（速度）
-5. **验证结果**：用 MD 模拟验证结合稳定性
+### Docking Best Practices
+1. **Prepare receptor**: remove water molecules and non-essential HETATM, add hydrogen atoms
+2. **Prepare ligand**: generate 3D conformation, assign Gasteiger charges
+3. **Define docking box**: use pocket center detected by fpocket/P2Rank
+4. **Run docking**: recommend GNINA (accuracy) or AutoDock-GPU (speed)
+5. **Validate results**: use MD simulation to verify binding stability
 
-### 常见问题
-- **结合亲和力不等于 IC50**：对接预测的是相对排序，不是绝对活性
-- **多个构象**：选择亲和力最好的构象，但也要看化学合理性
-- **金属离子**：含金属的活性位点需要特殊处理
-
----
-
-## 4. 分子动力学模拟（GROMACS）
-
-### 原理
-- 求解牛顿运动方程，模拟分子在力场下的运动
-- 时间尺度：飞秒（fs）到微秒（μs）
-- 力场：描述原子间相互作用（键、角、二面角、范德华、静电）
-
-### 常用力场
-- **AMBER99SB-ILDN**：蛋白质，广泛验证
-- **CHARMM36**：蛋白质+脂质膜
-- **OPLS-AA**：蛋白质+小分子
-- **GAFF/CGenFF**：小分子配体参数化
-
-### MD 流程
-1. **pdb2gmx**：生成拓扑
-2. **editconf**：设置模拟盒子（边距 1.0nm）
-3. **solvate**：加溶剂（TIP3P 水）
-4. **genion**：加离子中和电荷
-5. **能量最小化（EM）**：消除不合理接触
-6. **NVT 平衡**（100ps）：温度平衡（300K）
-7. **NPT 平衡**（100ps）：压力平衡（1 bar）
-8. **正式 MD**（10ns-1μs）：产生轨迹
-
-### 关键分析
-- **RMSD**：骨架偏离初始结构的程度，稳定 < 2Å
-- **RMSF**：每个残基的柔性，高 RMSF = 灵活区域
-- **氢键分析**：蛋白-配体氢键数和寿命
-- **MM-PBSA/GBSA**：结合自由能计算
-- **主成分分析（PCA）**：提取主要运动模式
-
-### 什么时候需要 MD
-- 对接后验证结合稳定性
-- 研究蛋白构象变化
-- 计算结合自由能
-- 研究药物释放机制
+### Common Issues
+- **Binding affinity does not equal IC50**: docking predicts relative ranking, not absolute activity
+- **Multiple conformations**: select the conformation with best affinity, but also assess chemical reasonableness
+- **Metal ions**: active sites containing metals require special handling
 
 ---
 
-## 5. ADC 药物设计
+## 4. Molecular Dynamics Simulation (GROMACS)
 
-### ADC 概述
-抗体偶联药物（Antibody-Drug Conjugate）= 抗体 + 连接子 + 载荷
-- 抗体：靶向递送，选择性结合肿瘤细胞表面抗原
-- 连接子（Linker）：连接抗体和载荷，控制药物释放
-- 载荷（Payload）：细胞毒性药物，杀死肿瘤细胞
+### Principles
+- Solves Newton's equations of motion, simulates molecular movement under force fields
+- Time scale: femtoseconds (fs) to microseconds (us)
+- Force fields: describe interatomic interactions (bonds, angles, dihedrals, van der Waals, electrostatics)
 
-### 关键参数
-- **DAR**（Drug-to-Antibody Ratio）：每个抗体连接的药物数
-  - DAR 2-4：传统 ADC（如 T-DM1）
-  - DAR 8：高载药比（如 DS-8201/T-DXd）
-  - DAR 过高会影响药代动力学
-- **靶标选择**：高表达于肿瘤、低表达于正常组织的抗原
-- **内化效率**：ADC 需要被细胞内化后释放药物
+### Common Force Fields
+- **AMBER99SB-ILDN**: proteins, extensively validated
+- **CHARMM36**: proteins + lipid membranes
+- **OPLS-AA**: proteins + small molecules
+- **GAFF/CGenFF**: small molecule ligand parameterization
 
-### 连接子类型
-#### 可切割连接子（Cleavable）
-- **酸敏感**：hydrazone，在溶酶体低 pH 环境断裂
-- **蛋白酶敏感**：Val-Cit (VC)，被组织蛋白酶 B 切割
-  - MC-VC-PABC：最常用的可切割连接子
-- **二硫键**：在细胞内还原环境断裂
-- 优点：药物释放高效
-- 缺点：可能在血液循环中提前断裂
+### MD Workflow
+1. **pdb2gmx**: generate topology
+2. **editconf**: set simulation box (margin 1.0 nm)
+3. **solvate**: add solvent (TIP3P water)
+4. **genion**: add ions to neutralize charge
+5. **Energy minimization (EM)**: eliminate unreasonable contacts
+6. **NVT equilibration** (100 ps): temperature equilibration (300K)
+7. **NPT equilibration** (100 ps): pressure equilibration (1 bar)
+8. **Production MD** (10 ns-1 us): generate trajectory
 
-#### 不可切割连接子（Non-cleavable）
-- **SMCC**：T-DM1 使用的连接子
-- 需要抗体在溶酶体中完全降解才释放药物
-- 优点：血液稳定性好
-- 缺点：释放的药物带有连接子残基
+### Key Analyses
+- **RMSD**: backbone deviation from initial structure, stable < 2A
+- **RMSF**: per-residue flexibility, high RMSF = flexible region
+- **Hydrogen bond analysis**: protein-ligand hydrogen bond count and lifetime
+- **MM-PBSA/GBSA**: binding free energy calculation
+- **Principal Component Analysis (PCA)**: extract major motion modes
 
-### 常用载荷
-| 载荷 | 机制 | IC50 | 代表 ADC |
-|------|------|------|----------|
-| MMAE | 微管抑制 | 0.1-1 nM | Adcetris (brentuximab vedotin) |
-| MMAF | 微管抑制 | 1-10 nM | Blenrep (belantamab mafodotin) |
-| DM1 | 微管抑制 | 0.1-1 nM | Kadcyla (T-DM1) |
-| DXd | TopoI 抑制 | 1-10 nM | Enhertu (T-DXd, DS-8201) |
-| SN-38 | TopoI 抑制 | 1-10 nM | Trodelvy (sacituzumab govitecan) |
-| PBD | DNA 交联 | pM 级 | Zynlonta (loncastuximab tesirine) |
+### When MD Is Needed
+- Validate binding stability after docking
+- Study protein conformational changes
+- Calculate binding free energy
+- Study drug release mechanisms
 
-### 偶联化学
-- **赖氨酸偶联**（NHS-amine）：非位点特异性，DAR 异质
-- **半胱氨酸偶联**（maleimide-thiol）：部分还原后偶联，DAR 较均一
-- **位点特异性偶联**：工程化位点（如非天然氨基酸），DAR 均一
-- 偶联位点选择标准：
-  - SASA > 40 Å²（溶剂可及）
-  - 不在 CDR 区域（不影响靶标结合）
-  - 不在 Fc 效应区域（不影响免疫功能）
+---
 
-### 已获批 ADC
-| 药物 | 靶标 | 适应症 | 获批年 |
-|------|------|--------|--------|
-| Adcetris | CD30 | 霍奇金淋巴瘤 | 2011 |
-| Kadcyla | HER2 | 乳腺癌 | 2013 |
+## 5. ADC Drug Design
+
+### ADC Overview
+Antibody-Drug Conjugate (ADC) = Antibody + Linker + Payload
+- Antibody: targeted delivery, selectively binds tumor cell surface antigens
+- Linker: connects antibody and payload, controls drug release
+- Payload: cytotoxic drug, kills tumor cells
+
+### Key Parameters
+- **DAR** (Drug-to-Antibody Ratio): number of drugs conjugated per antibody
+  - DAR 2-4: traditional ADC (e.g., T-DM1)
+  - DAR 8: high drug loading ratio (e.g., DS-8201/T-DXd)
+  - Excessively high DAR affects pharmacokinetics
+- **Target selection**: antigens highly expressed on tumors, low expression on normal tissues
+- **Internalization efficiency**: ADC must be internalized by cells before drug release
+
+### Linker Types
+#### Cleavable Linkers
+- **Acid-labile**: hydrazone, cleaves in lysosomal low pH environment
+- **Protease-sensitive**: Val-Cit (VC), cleaved by cathepsin B
+  - MC-VC-PABC: most commonly used cleavable linker
+- **Disulfide**: cleaves in intracellular reducing environment
+- Advantages: efficient drug release
+- Disadvantages: may cleave prematurely in blood circulation
+
+#### Non-cleavable Linkers
+- **SMCC**: linker used in T-DM1
+- Requires complete antibody degradation in lysosomes to release drug
+- Advantages: good blood stability
+- Disadvantages: released drug retains linker residue
+
+### Common Payloads
+| Payload | Mechanism | IC50 | Representative ADC |
+|---------|-----------|------|--------------------|
+| MMAE | Tubulin inhibition | 0.1-1 nM | Adcetris (brentuximab vedotin) |
+| MMAF | Tubulin inhibition | 1-10 nM | Blenrep (belantamab mafodotin) |
+| DM1 | Tubulin inhibition | 0.1-1 nM | Kadcyla (T-DM1) |
+| DXd | TopoI inhibition | 1-10 nM | Enhertu (T-DXd, DS-8201) |
+| SN-38 | TopoI inhibition | 1-10 nM | Trodelvy (sacituzumab govitecan) |
+| PBD | DNA crosslinking | pM range | Zynlonta (loncastuximab tesirine) |
+
+### Conjugation Chemistry
+- **Lysine conjugation** (NHS-amine): non-site-specific, heterogeneous DAR
+- **Cysteine conjugation** (maleimide-thiol): conjugation after partial reduction, more uniform DAR
+- **Site-specific conjugation**: engineered sites (e.g., unnatural amino acids), uniform DAR
+- Conjugation site selection criteria:
+  - SASA > 40 A^2 (solvent accessible)
+  - Not in CDR regions (does not affect target binding)
+  - Not in Fc effector regions (does not affect immune function)
+
+### Approved ADCs
+| Drug | Target | Indication | Approval Year |
+|------|--------|------------|---------------|
+| Adcetris | CD30 | Hodgkin lymphoma | 2011 |
+| Kadcyla | HER2 | Breast cancer | 2013 |
 | Besponsa | CD22 | ALL | 2017 |
-| Enhertu | HER2 | 乳腺癌/胃癌 | 2019 |
-| Padcev | Nectin-4 | 尿路上皮癌 | 2019 |
-| Trodelvy | TROP2 | 三阴乳腺癌 | 2020 |
+| Enhertu | HER2 | Breast cancer/gastric cancer | 2019 |
+| Padcev | Nectin-4 | Urothelial carcinoma | 2019 |
+| Trodelvy | TROP2 | Triple-negative breast cancer | 2020 |
 | Zynlonta | CD19 | DLBCL | 2021 |
 
 ---
 
-## 6. ADMET 预测
+## 6. ADMET Prediction
 
-### 什么是 ADMET
-- **A**bsorption（吸收）：药物能否被人体吸收
-- **D**istribution（分布）：药物在体内的分布
-- **M**etabolism（代谢）：药物如何被代谢
-- **E**xcretion（排泄）：药物如何排出体外
-- **T**oxicity（毒性）：药物的毒副作用
+### What Is ADMET
+- **A**bsorption: whether the drug can be absorbed by the body
+- **D**istribution: drug distribution in the body
+- **M**etabolism: how the drug is metabolized
+- **E**xcretion: how the drug is eliminated from the body
+- **T**oxicity: adverse effects of the drug
 
-### 我们预测的 5 个属性
-1. **ESOL 溶解度**（logS）：
-   - logS > -1：高溶解度
-   - -1 到 -4：中等
-   - < -4：低溶解度（可能影响口服吸收）
+### Five Properties We Predict
+1. **ESOL Solubility** (logS):
+   - logS > -1: high solubility
+   - -1 to -4: moderate
+   - < -4: low solubility (may affect oral absorption)
 
-2. **脂溶性**（logP/logD）：
-   - 1 < logP < 3：理想范围（Lipinski Rule of Five）
-   - logP > 5：可能有膜渗透性问题
+2. **Lipophilicity** (logP/logD):
+   - 1 < logP < 3: ideal range (Lipinski Rule of Five)
+   - logP > 5: may have membrane permeability issues
 
-3. **血脑屏障（BBB）通透性**：
-   - 预测概率 > 0.7：可能穿过 BBB
-   - 对 CNS 药物重要，对非 CNS 药物应避免
+3. **Blood-Brain Barrier (BBB) Permeability**:
+   - Predicted probability > 0.7: likely crosses BBB
+   - Important for CNS drugs, should be avoided for non-CNS drugs
 
-4. **Tox21 毒性**：
-   - NR-AhR 通路激活预测
-   - 评分 < 0.5：低毒性风险
-   - 评分 > 0.5：需要进一步毒理学研究
+4. **Tox21 Toxicity**:
+   - NR-AhR pathway activation prediction
+   - Score < 0.5: low toxicity risk
+   - Score > 0.5: requires further toxicological study
 
-5. **水化自由能**（FreeSolv）：
-   - 反映分子与水的相互作用强度
-   - 与溶解度相关
+5. **Hydration Free Energy** (FreeSolv):
+   - Reflects strength of molecule-water interactions
+   - Related to solubility
 
-### Lipinski 五规则（口服药物）
-- 分子量 < 500 Da
+### Lipinski Rule of Five (Oral Drugs)
+- Molecular weight < 500 Da
 - logP < 5
-- 氢键供体 < 5
-- 氢键受体 < 10
-- 违反 2 条以上 → 可能口服生物利用度差
+- Hydrogen bond donors < 5
+- Hydrogen bond acceptors < 10
+- Violating more than 2 rules indicates potentially poor oral bioavailability
 
 ---
 
-## 7. 口袋检测与界面预测
+## 7. Pocket Detection and Interface Prediction
 
 ### fpocket
-- 几何算法，基于 Voronoi 镶嵌和 α-球
-- 检测蛋白表面的凹陷（口袋）
-- 输出：口袋排名 + druggability 评分 + 残基列表
+- Geometric algorithm based on Voronoi tessellation and alpha-spheres
+- Detects cavities (pockets) on protein surfaces
+- Output: pocket ranking + druggability score + residue list
 
 ### P2Rank
-- 机器学习口袋预测
-- 基于表面特征训练的随机森林
-- 输出：口袋概率 + 中心坐标 + 残基
+- Machine learning pocket prediction
+- Random forest trained on surface features
+- Output: pocket probability + center coordinates + residues
 
-### PeSTo（PPI 界面预测）
-- 预测蛋白-蛋白相互作用界面
-- ROC AUC = 0.92（优于 MaSIF-site 的 0.80）
-- 输出：每个残基的 PPI 界面概率
-- 与 DiscoTope3 的区别：
-  - PeSTo 预测 PPI 界面（蛋白-蛋白结合位点）→ 适合 binder 设计
-  - DiscoTope3 预测 B 细胞表位（免疫原性表面）→ 适合疫苗设计
-  - 两者结果可能完全不同（CD36 案例验证）
+### PeSTo (PPI Interface Prediction)
+- Predicts protein-protein interaction interfaces
+- ROC AUC = 0.92 (outperforms MaSIF-site at 0.80)
+- Output: PPI interface probability for each residue
+- Difference from DiscoTope3:
+  - PeSTo predicts PPI interfaces (protein-protein binding sites) -- suitable for binder design
+  - DiscoTope3 predicts B-cell epitopes (immunogenic surfaces) -- suitable for vaccine design
+  - Results may be entirely different (validated with CD36 case)
 
 ### DiscoTope3
-- B 细胞表位预测（预测抗体可识别的表面残基）
-- 基于 ESM-IF1 + XGBoost
-- 注意：DT3 raw score 范围因结构不同，不要用固定阈值
+- B-cell epitope prediction (predicts surface residues recognizable by antibodies)
+- Based on ESM-IF1 + XGBoost
+- Note: DT3 raw score range varies by structure, do not use a fixed threshold
 
 ---
 
-## 8. 靶标分级系统（Target Tier）
+## 8. Target Tier Classification System
 
-| Tier | 方法 | 可靠性 | 适用场景 |
-|------|------|--------|----------|
-| Tier 1 | 结构数据库 | 最高 | PDB 中有已知抗体-抗原共晶结构 |
-| Tier 2 | RAG 文献引导 | 中等 | 文献中有同源结构或突变数据 |
-| Tier 2 | 计算预测 | 较低 | 全新靶标，依赖 PeSTo/DT3 预测 |
+| Tier | Method | Reliability | Application Scenario |
+|------|--------|-------------|----------------------|
+| Tier 1 | Structural database | Highest | Known antibody-antigen co-crystal structure in PDB |
+| Tier 2 | RAG literature-guided | Moderate | Homologous structures or mutagenesis data in literature |
+| Tier 2 | Computational prediction | Lower | Novel targets, relies on PeSTo/DT3 prediction |
 
-### 已验证靶标
-| 靶标 | PDB | Tier | Best ipTM | Best ipSAE | 用途 |
-|------|-----|------|-----------|------------|------|
-| HER2 | 1N8Z | 1 | 0.85 | 0.529 | 乳腺癌 |
-| Nectin-4 | 4MZV | 2 | 0.87 | 0.679 | 尿路上皮癌 |
-| EGFR | 1YY9 | 1 | 0.52 | 0.190 | 非小细胞肺癌 |
-| CD36 | 5LGD | 3 | 0.58 | 0.056 | 代谢疾病 |
-| TROP2 | — | 3 | 0.22 | 0.000 | 三阴乳腺癌 |
-| PD-L1 | 5XXY | 1 | — | — | 免疫检查点 |
-
----
-
-## 9. 常见客户场景
-
-### 场景 1：已知靶标的 binder 设计
-输入：靶标名称/PDB ID
-流程：获取结构 → 热点分析 → RFdiffusion → ProteinMPNN → AF3 验证 → ADC 构建
-输出：设计序列 + 结构 + 验证指标
-
-### 场景 2：小分子虚拟筛选
-输入：靶标 PDB + 候选分子 SMILES
-流程：口袋检测 → 分子对接 → ADMET 预测
-输出：结合构象 + 亲和力排名 + ADMET 评估
-
-### 场景 3：已知药物的 ADMET 评估
-输入：分子名称或 SMILES
-流程：PubChem 获取 SMILES → Chemprop 预测
-输出：5 个 ADMET 属性 + 解读
-
-### 场景 4：蛋白结构预测
-输入：FASTA 序列或蛋白名称
-流程：AlphaFold3 预测
-输出：3D 结构 + 置信度评分
-
-### 场景 5：分子动力学验证
-输入：PDB 复合物 + 模拟时长
-流程：GROMACS MD 流水线
-输出：RMSD/RMSF 分析 + 结合稳定性评估
+### Validated Targets
+| Target | PDB | Tier | Best ipTM | Best ipSAE | Application |
+|--------|-----|------|-----------|------------|-------------|
+| HER2 | 1N8Z | 1 | 0.85 | 0.529 | Breast cancer |
+| Nectin-4 | 4MZV | 2 | 0.87 | 0.679 | Urothelial carcinoma |
+| EGFR | 1YY9 | 1 | 0.52 | 0.190 | Non-small cell lung cancer |
+| CD36 | 5LGD | 3 | 0.58 | 0.056 | Metabolic disease |
+| TROP2 | -- | 3 | 0.22 | 0.000 | Triple-negative breast cancer |
+| PD-L1 | 5XXY | 1 | -- | -- | Immune checkpoint |
 
 ---
 
-## 10. 对接结果高级解读
+## 9. Common Customer Scenarios
 
-### 结合亲和力与实验值的关系
-- 对接亲和力是**估计值**，不等于实验 IC50/Kd
-- Vina/GNINA 亲和力误差通常 ±2 kcal/mol
-- 亲和力排序（relative ranking）比绝对值更有意义
-- -7 kcal/mol 对应约 μM 级结合（Kd ≈ exp(ΔG/RT)）
-- -10 kcal/mol 对应约 nM 级结合
+### Scenario 1: Binder Design for Known Target
+Input: target name/PDB ID
+Workflow: obtain structure -> hotspot analysis -> RFdiffusion -> ProteinMPNN -> AF3 validation -> ADC assembly
+Output: designed sequences + structures + validation metrics
 
-### 对接盒子设置建议
-- **盒子中心**：使用 fpocket/P2Rank 检测的口袋中心
-- **盒子大小**：口袋直径 + 10Å buffer（通常 20-30Å）
-- **太小**：配体找不到正确构象
-- **太大**：搜索空间太大，耗时长且结果不准
+### Scenario 2: Small Molecule Virtual Screening
+Input: target PDB + candidate molecule SMILES
+Workflow: pocket detection -> molecular docking -> ADMET prediction
+Output: binding conformations + affinity ranking + ADMET assessment
 
-### 常见对接失败原因
-1. **受体准备不当**：缺少氢原子、水分子未处理、金属离子参数化
-2. **配体 3D 构象错误**：需要先做构象搜索
-3. **口袋错误**：选错了结合位点
-4. **评分函数局限**：疏水作用和熵效应评估不准
+### Scenario 3: ADMET Assessment of Known Drugs
+Input: molecule name or SMILES
+Workflow: obtain SMILES from PubChem -> Chemprop prediction
+Output: 5 ADMET properties + interpretation
+
+### Scenario 4: Protein Structure Prediction
+Input: FASTA sequence or protein name
+Workflow: AlphaFold3 prediction
+Output: 3D structure + confidence scores
+
+### Scenario 5: Molecular Dynamics Validation
+Input: PDB complex + simulation duration
+Workflow: GROMACS MD pipeline
+Output: RMSD/RMSF analysis + binding stability assessment
 
 ---
 
-## 11. ADC 临床开发要点
+## 10. Advanced Docking Result Interpretation
 
-### ADC 失败的常见原因
-1. **靶标选择不当**：正常组织表达过高 → 系统毒性
-2. **连接子不稳定**：血液循环中过早释放 → 全身毒性
-3. **DAR 过高**：加速清除，降低疗效
-4. **载荷旁观者效应**：杀伤周围正常细胞
-5. **免疫原性**：抗药抗体（ADA）产生
+### Relationship Between Binding Affinity and Experimental Values
+- Docking affinity is an **estimate**, not equal to experimental IC50/Kd
+- Vina/GNINA affinity error is typically +/-2 kcal/mol
+- Affinity ranking (relative ranking) is more meaningful than absolute values
+- -7 kcal/mol corresponds to approximately uM-level binding (Kd ~ exp(dG/RT))
+- -10 kcal/mol corresponds to approximately nM-level binding
 
-### ADC 设计的黄金标准
-- 靶标：肿瘤/正常表达比 > 10:1
-- 内化效率 > 50%
-- DAR 4±0.5（均一）
-- 血浆半衰期 > 3 天
-- 旁观者效应可控
+### Docking Box Setup Recommendations
+- **Box center**: use pocket center detected by fpocket/P2Rank
+- **Box size**: pocket diameter + 10A buffer (typically 20-30A)
+- **Too small**: ligand cannot find correct conformation
+- **Too large**: search space too large, slow and inaccurate results
 
-### 已获批 ADC 的关键数据
-| 药物 | 靶标 | 载荷 | 连接子 | DAR | ORR |
-|------|------|------|--------|-----|-----|
-| T-DM1 (Kadcyla) | HER2 | DM1 | SMCC（不可切割）| 3.5 | 44% |
+### Common Docking Failure Causes
+1. **Improper receptor preparation**: missing hydrogen atoms, unprocessed water molecules, metal ion parameterization
+2. **Incorrect ligand 3D conformation**: conformational search needed first
+3. **Wrong pocket**: incorrect binding site selected
+4. **Scoring function limitations**: inaccurate assessment of hydrophobic effects and entropy
+
+---
+
+## 11. ADC Clinical Development Key Points
+
+### Common Reasons for ADC Failure
+1. **Poor target selection**: high expression on normal tissues -> systemic toxicity
+2. **Unstable linker**: premature release in blood circulation -> systemic toxicity
+3. **Excessively high DAR**: accelerated clearance, reduced efficacy
+4. **Payload bystander effect**: kills surrounding normal cells
+5. **Immunogenicity**: anti-drug antibody (ADA) generation
+
+### Gold Standard for ADC Design
+- Target: tumor/normal expression ratio > 10:1
+- Internalization efficiency > 50%
+- DAR 4+/-0.5 (uniform)
+- Plasma half-life > 3 days
+- Controllable bystander effect
+
+### Key Data for Approved ADCs
+| Drug | Target | Payload | Linker | DAR | ORR |
+|------|--------|---------|--------|-----|-----|
+| T-DM1 (Kadcyla) | HER2 | DM1 | SMCC (non-cleavable) | 3.5 | 44% |
 | Adcetris | CD30 | MMAE | MC-VC-PABC | 4 | 75% |
-| Enhertu (T-DXd) | HER2 | DXd | GGFG四肽 | 8 | 62% |
+| Enhertu (T-DXd) | HER2 | DXd | GGFG tetrapeptide | 8 | 62% |
 | Padcev | Nectin-4 | MMAE | MC-VC-PABC | 3.8 | 44% |
-| Trodelvy | TROP2 | SN-38 | CL2A（酸敏感）| 7.6 | 33% |
+| Trodelvy | TROP2 | SN-38 | CL2A (acid-labile) | 7.6 | 33% |
 
 ---
 
-## 12. 分子动力学高级分析
+## 12. Advanced Molecular Dynamics Analysis
 
-### MM-PBSA 结合自由能
-- ΔG_bind = ΔG_complex - ΔG_receptor - ΔG_ligand
-- 包含：范德华 + 静电 + 极性溶剂化 + 非极性溶剂化 - TΔS
-- ΔG < -10 kcal/mol：强结合
-- ΔG < -5 kcal/mol：中等结合
-- 通常用 MD 轨迹最后 2-5 ns 的帧计算
+### MM-PBSA Binding Free Energy
+- dG_bind = dG_complex - dG_receptor - dG_ligand
+- Includes: van der Waals + electrostatics + polar solvation + nonpolar solvation - TdS
+- dG < -10 kcal/mol: strong binding
+- dG < -5 kcal/mol: moderate binding
+- Typically calculated from the last 2-5 ns frames of the MD trajectory
 
-### MD 质量控制
-- **温度波动**：±5K 以内正常
-- **压力波动**：±100 bar 以内正常（NPT）
-- **RMSD 收敛**：前 1-2 ns 为平衡期，之后应趋于稳定
-- **能量漂移**：总能量应保守，不应持续上升/下降
+### MD Quality Control
+- **Temperature fluctuation**: within +/-5K is normal
+- **Pressure fluctuation**: within +/-100 bar is normal (NPT)
+- **RMSD convergence**: first 1-2 ns is equilibration period, should stabilize afterwards
+- **Energy drift**: total energy should be conserved, should not continuously increase/decrease
 
-### 什么时候需要更长的 MD
-- 10ns：基本验证结合稳定性
-- 100ns：观察构象变化和配体解离
-- 1μs：蛋白折叠/大构象变化
-- 100ns 以上建议使用增强采样（MetaD、REST2）
+### When Longer MD Is Needed
+- 10 ns: basic validation of binding stability
+- 100 ns: observe conformational changes and ligand dissociation
+- 1 us: protein folding/large conformational changes
+- Above 100 ns, enhanced sampling is recommended (MetaD, REST2)

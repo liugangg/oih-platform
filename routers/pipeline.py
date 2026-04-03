@@ -26,13 +26,13 @@ router = APIRouter()
 
 # ============================================================
 # AF3 Antigen Domain Registry
-# 基于文献：序列截取保留完整结构域，避免破坏二硫键和折叠单元
-# 原则：
-#   1. 按UniProt/Pfam结构域边界截取，不按残基数截取
-#   2. 多个可成药域 → 分别跑AF3，各自验证
-#   3. 未知蛋白 → 用hotspot定位域边界
-#   4. padding=30aa 保留边界柔性区
-# 参考：Yin et al. Protein Science 2024; PMC12360200 (AF3 nanobody benchmark)
+# Literature-based: sequence truncation preserves complete domains, avoids disrupting disulfide bonds and folding units
+# Principles:
+#   1. Truncate by UniProt/Pfam domain boundaries, not by residue count
+#   2. Multiple druggable domains → run AF3 separately for each, validate independently
+#   3. Unknown proteins → use hotspot residues to locate domain boundaries
+#   4. padding=30aa preserves boundary flexible regions
+# Reference: Yin et al. Protein Science 2024; PMC12360200 (AF3 nanobody benchmark)
 # ============================================================
 
 DOMAIN_REGISTRY = {
@@ -159,7 +159,7 @@ DOMAIN_REGISTRY = {
     },
 }
 
-DOMAIN_PADDING = 30  # 域边界两侧各保留30aa
+DOMAIN_PADDING = 30  # Retain 30aa padding on each side of domain boundary
 
 
 def _get_af3_antigen_regions(
@@ -168,25 +168,25 @@ def _get_af3_antigen_regions(
     hotspot_residues: list = None,
 ) -> list:
     """
-    返回需要跑AF3验证的抗原域列表。
+    Return list of antigen domain regions for AF3 validation.
 
-    已知蛋白：从 DOMAIN_REGISTRY 取域边界
-    未知蛋白：用 hotspot_residues 定位，取包含hotspot的最小完整区域
-    多个域：返回多个dict，pipeline对每个域分别提交AF3任务
+    Known proteins: extract domain boundaries from DOMAIN_REGISTRY
+    Unknown proteins: use hotspot_residues to locate the minimal complete region containing hotspots
+    Multiple domains: return multiple dicts; pipeline submits separate AF3 tasks for each domain
 
-    返回格式：
+    Return format:
     [{"domain_name": str, "sequence": str, "offset": int, "description": str, "original_range": tuple}, ...]
     """
     regions = []
 
-    # 查找已知蛋白（不区分大小写）
+    # Look up known proteins (case-insensitive)
     registry_key = None
     for key in DOMAIN_REGISTRY:
         if key.upper() in target_name.upper():
             registry_key = key
             break
 
-    # 解析hotspot残基编号
+    # Parse hotspot residue numbers
     hotspot_nums = []
     if hotspot_residues:
         for h in hotspot_residues:
@@ -203,12 +203,12 @@ def _get_af3_antigen_regions(
             start, end = domain["range"]
 
             if hotspot_nums:
-                # 检查hotspot是否在此域内（考虑信号肽偏移）
+                # Check if hotspot falls within this domain (accounting for signal peptide offset)
                 adjusted_hotspots = [h - offset_correction for h in hotspot_nums]
                 if not any(start - 20 <= h <= end + 20 for h in adjusted_hotspots):
                     continue
 
-            # 加padding，不超出序列边界
+            # Add padding, clamped to sequence boundaries
             seq_start = max(0, start - DOMAIN_PADDING - offset_correction)
             seq_end = min(len(target_seq), end + DOMAIN_PADDING - offset_correction)
 
@@ -221,7 +221,7 @@ def _get_af3_antigen_regions(
             })
 
     else:
-        # 未知蛋白：用hotspot定位
+        # Unknown protein: locate region using hotspots
         if hotspot_nums:
             center = sum(hotspot_nums) // len(hotspot_nums)
             seq_start = max(0, center - 100)

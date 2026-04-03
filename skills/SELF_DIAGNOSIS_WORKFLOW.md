@@ -1,89 +1,89 @@
-# OIH 平台自我诊断与修复手册
+# OIH Platform Self-Diagnosis and Repair Manual
 
-## 核心原则
-当任何计算任务失败时，不等待用户指令，自主执行：
-诊断 → 修复参数 → 重试 → 验证 → 报告结果
+## Core Principle
+When any computational task fails, act autonomously without waiting for user instructions:
+Diagnose → Adjust parameters → Retry → Verify → Report results
 
-## AF3 失败诊断树
+## AF3 Failure Diagnosis Tree
 
-### ipTM=None（超时或崩溃）
-1. 检查输出目录是否有 CIF 文件：
+### ipTM=None (Timeout or Crash)
+1. Check whether the output directory contains CIF files:
    find /data/oih/outputs -name "*model.cif" | grep -i af3 | head -5
-2. 有 CIF → 超时误判，读取真实分数：
+2. CIF exists → Timeout false positive; read the actual scores:
    cat <output_dir>/*ranking_scores.csv
-   → 用真实 ipTM 继续 pipeline
-3. 无 CIF → 真正失败，检查原因：
+   → Use the real ipTM to continue the pipeline
+3. No CIF → True failure; investigate the cause:
    docker logs oih-alphafold3 --tail 30
    nvidia-smi --query-gpu=memory.used,memory.free --format=csv
-   → OOM：等待 GPU 空闲后重试
-   → 其他错误：查 /tmp/fastapi.log
+   → OOM: Wait for GPU to free up, then retry
+   → Other errors: Check /tmp/fastapi.log
 
-### ipTM < 0.5（设计质量差）
-原因：hotspot 残基选错或设计数量不足
-修复步骤：
-1. 换 hotspot 到真实结合界面：
-   - HER2 Domain II (pertuzumab表位): T144, R150, S175, R177
-   - HER2 Domain IV (trastuzumab表位): S310, T311, N344, R375
-   - TROP2 结合位点: K65, R87, D110
-2. 增加 num_designs: 10 → 50
-3. 降低验证阈值: 0.6 → 0.5（先跑通再优化）
+### ipTM < 0.5 (Poor Design Quality)
+Cause: Incorrect hotspot residues or insufficient number of designs
+Remediation steps:
+1. Switch hotspot to the actual binding interface:
+   - HER2 Domain II (pertuzumab epitope): T144, R150, S175, R177
+   - HER2 Domain IV (trastuzumab epitope): S310, T311, N344, R375
+   - TROP2 binding site: K65, R87, D110
+2. Increase num_designs: 10 → 50
+3. Lower validation threshold: 0.6 → 0.5 (get a successful run first, then optimize)
 
-### ipTM 0.5-0.75（低置信度通过）
-- 继续 pipeline，标记为 low_confidence
-- 在报告中注明需要湿实验验证
+### ipTM 0.5-0.75 (Low-Confidence Pass)
+- Continue the pipeline; flag as low_confidence
+- Note in the report that wet-lab experimental validation is required
 
-## VRAM 问题诊断
+## VRAM Issue Diagnosis
 
-### 快速检查
+### Quick Check
 nvidia-smi --query-gpu=index,memory.used,memory.free --format=csv,noheader
 
-### 路由规则
-- GPU0 (23GB): Qwen3-14B 常驻，剩余空间不稳定
-- GPU1 (46GB): 所有生物计算工具，容器内 device=0
-- AF3/BindCraft 需要 ≥20GB → 只能用 GPU1
-- 如果 GPU1 不足 → 等待，不降级
+### Routing Rules
+- GPU0 (23GB): Qwen3-14B resident; remaining space is unstable
+- GPU1 (46GB): All bioinformatics tools; device=0 inside containers
+- AF3/BindCraft require ≥20GB → Must use GPU1
+- If GPU1 is insufficient → Wait; do not downgrade
 
-## RFdiffusion 设计质量优化
+## RFdiffusion Design Quality Optimization
 
-### 自动参数调整策略
-第一轮：num_designs=10，快速验证 hotspot
-→ 全部失败：换 hotspot 重试
-→ 部分通过 (ipTM>0.5)：增加 num_designs=50
-→ 无通过：降低 AF3 阈值到 0.5
+### Automatic Parameter Adjustment Strategy
+Round 1: num_designs=10, quick hotspot validation
+→ All failed: Switch hotspot and retry
+→ Some passed (ipTM>0.5): Increase num_designs=50
+→ None passed: Lower AF3 threshold to 0.5
 
-### HER2 靶点最优 hotspot
-- 避开 trastuzumab 表位（竞争现有药物）
-- 推荐新表位：Domain II K505, E558, D561
-  或 Domain III: H473, N476
+### HER2 Target Optimal Hotspots
+- Avoid the trastuzumab epitope (competes with existing drugs)
+- Recommended novel epitope: Domain II K505, E558, D561
+  or Domain III: H473, N476
 
-## GROMACS 常见问题
+## GROMACS Common Issues
 
-### nvt.gro 不存在
-→ NVT 步骤静默失败，检查：
+### nvt.gro Does Not Exist
+→ NVT step failed silently; check:
    cat /data/oih/outputs/<job>/nvt.log | tail -20
 
-### tc-grps 错误
-→ 动态检测蛋白+配体组名，不要硬编码
+### tc-grps Error
+→ Dynamically detect protein+ligand group names; do not hardcode
 
-## RFdiffusion ContigMap 崩溃
+## RFdiffusion ContigMap Crash
 
 ### AssertionError: ('A', N) is not in pdb file!
-原因：PDB 有残基间隙（晶体学缺失残基），ContigMap 遍历连续范围时找不到缺失的残基。
-修复：Router 自动重编号 PDB（去 HETATM + 顺序编号），已在 `_renumber_pdb_for_rfdiffusion()` 实现。
-如仍出现：检查是否有非标准残基、PDB 文件是否被截断。
+Cause: The PDB has residue gaps (crystallographically missing residues); ContigMap fails when traversing a continuous range that includes missing residues.
+Fix: The router automatically renumbers the PDB (removes HETATM + sequential renumbering), implemented in `_renumber_pdb_for_rfdiffusion()`.
+If the error persists: Check for non-standard residues or a truncated PDB file.
 
-## Pipeline 自动重试策略
+## Pipeline Automatic Retry Strategy
 
-失败后自动重试规则：
-1. 超时类错误 → 直接重试（最多3次）
-2. OOM 错误 → 等待60s再重试
-3. 参数错误 → 调整参数后重试
-4. 文件不存在 → 检查上一步是否完成
+Automatic retry rules after failure:
+1. Timeout errors → Retry immediately (up to 3 times)
+2. OOM errors → Wait 60s, then retry
+3. Parameter errors → Adjust parameters, then retry
+4. File not found → Check whether the previous step completed
 
-## 蒸馏训练数据
+## Distillation Training Data
 
-位置：`data/distillation/`
-格式：JSONL，每行一个案例（task_id, error_msg, tool, fix_applied, outcome）
-分类：gpu / container / tool / pipeline / proxy / dashboard / abandoned / reference
-目标：积累 100 条后做 LoRA 微调 Qwen3-14B
-收集脚本：`scripts/collect_distillation_data.py`（自动从任务历史提取失败模式）
+Location: `data/distillation/`
+Format: JSONL, one case per line (task_id, error_msg, tool, fix_applied, outcome)
+Categories: gpu / container / tool / pipeline / proxy / dashboard / abandoned / reference
+Goal: Accumulate 100+ cases for LoRA fine-tuning of Qwen3-14B
+Collection script: `scripts/collect_distillation_data.py` (automatically extracts failure patterns from task history)

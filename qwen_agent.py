@@ -1,14 +1,14 @@
 """
 Qwen3-14B Agent Integration
-将 Qwen 连接到 OIH 工具链的完整示例
+Complete example of connecting Qwen to the OIH tool chain
 
-部署方式：
+Deployment:
   GPU0 → vLLM serving Qwen3-14B
   GPU1 → OIH API Gateway (this FastAPI service)
-  
+
 Usage:
   python qwen_agent.py
-  或通过 HTTP POST /api/v1/agent/chat 调用
+  or call via HTTP POST /api/v1/agent/chat
 """
 
 import asyncio
@@ -125,16 +125,16 @@ class QwenBioAgent:
         self._llm_backend: LLMBackend = llm_backend or _default_backend
 
     SIMPLE_PATTERNS = [
-        "你好", "hello", "hi", "嗨", "早", "晚安", "谢谢", "thanks",
-        "ok", "好的", "收到", "再见", "bye", "nice", "👍", "哈哈",
+        "hello", "hi", "hey", "morning", "good night", "thanks", "thank you",
+        "ok", "okay", "got it", "bye", "goodbye", "nice", "👍", "haha",
     ]
     BIO_KEYWORDS = [
-        "protein", "pdb", "smiles", "fasta", "药", "蛋白", "抗体", "设计",
-        "预测", "分析", "结构", "对接", "序列", "靶点", "分子", "nanobody",
+        "protein", "pdb", "smiles", "fasta", "drug", "antibody", "design",
+        "predict", "analysis", "structure", "docking", "sequence", "target", "molecule", "nanobody",
         "alphafold", "gromacs", "docking", "md", "adc", "ligand",
     ]
 
-    # ── 已知靶标 PDB 映射 ──
+    # ── Known target PDB mapping ──
     TARGET_PDB = {
         "her2": "1N8Z", "erbb2": "1N8Z", "pd-l1": "5XXY", "pdl1": "5XXY",
         "egfr": "1YY9", "vegf": "1BJ1", "tnf": "3WD5", "cd36": "5LGD",
@@ -158,7 +158,7 @@ class QwenBioAgent:
         """Pattern-match fixed workflows. Returns list of tool calls or None."""
         m = msg.lower().strip()
 
-        # 找靶标名和PDB ID
+        # Find target name and PDB ID
         target_name = None
         pdb_id = None
         for name, pid in QwenBioAgent.TARGET_PDB.items():
@@ -166,42 +166,39 @@ class QwenBioAgent:
                 target_name = name.upper()
                 pdb_id = pid
                 break
-        # 也支持直接输入 PDB ID (4位：数字开头+3位字母数字)
+        # Also supports direct PDB ID input (4 chars: digit + 3 alphanumeric)
         import re as _re
         pdb_match = _re.search(r'(?<![A-Za-z0-9])([0-9][A-Za-z0-9]{3})(?![A-Za-z0-9])', msg)
         if pdb_match and not pdb_id:
             pdb_id = pdb_match.group(1).upper()
 
-        # ── 路由1: AF3 结构预测 ──
-        if any(k in m for k in ["alphafold", "af3", "结构预测", "predict structure", "预测.*结构"]):
+        # ── Route 1: AF3 structure prediction ──
+        if any(k in m for k in ["alphafold", "af3", "predict structure", "structure prediction"]):
             if pdb_id:
                 return "af3_predict", [
                     {"name": "fetch_pdb", "args": {"pdb_id": pdb_id}},
-                ], f"正在下载 {pdb_id}，获取序列后将提交 AlphaFold3 预测..."
+                ], f"Downloading {pdb_id}, will submit AlphaFold3 prediction after extracting sequence..."
 
-        # 常见中文药名→英文
-        _ZH_MOL = {"棕榈酸": "palmitic acid", "阿司匹林": "aspirin", "青霉素": "penicillin",
-                    "红霉素": "erythromycin", "紫杉醇": "paclitaxel", "多柔比星": "doxorubicin",
-                    "厄洛替尼": "erlotinib", "吉非替尼": "gefitinib", "伊马替尼": "imatinib",
-                    "索拉非尼": "sorafenib", "奥希替尼": "osimertinib", "拉帕替尼": "lapatinib"}
+        # Common drug name aliases
+        _MOL_ALIASES = {}
 
-        # ── 路由2: 分子对接 ──
-        if any(k in m for k in ["对接", "dock", "docking"]):
-            mol_match = _re.search(r'(?:和|与|and|with)\s*(\S+)', m)
+        # ── Route 2: Molecular docking ──
+        if any(k in m for k in ["dock", "docking"]):
+            mol_match = _re.search(r'(?:and|with)\s*(\S+)', m)
             mol_name = mol_match.group(1) if mol_match else None
             if mol_name:
-                mol_name = _ZH_MOL.get(mol_name, mol_name)  # 中文翻译
+                mol_name = _MOL_ALIASES.get(mol_name, mol_name)
             if pdb_id and mol_name:
                 return "docking", [
                     {"name": "fetch_pdb", "args": {"pdb_id": pdb_id}},
                     {"name": "fetch_molecule", "args": {"query": mol_name}},
-                ], f"正在下载 {pdb_id} 和获取 {mol_name}，准备对接..."
+                ], f"Downloading {pdb_id} and fetching {mol_name}, preparing docking..."
 
-        # ── 路由3: Binder/ADC 设计（无指定残基）──
-        if any(k in m for k in ["设计binder", "design binder", "设计抗体", "设计纳米抗体",
-                                  "design antibody", "design nanobody", "设计adc", "design adc",
-                                  "靶向.*binder", "靶向.*抗体", "靶向.*纳米抗体"]) or \
-           (_re.search(r'靶向.*(binder|抗体|纳米抗体)', m)):
+        # ── Route 3: Binder/ADC design (no specified residues) ──
+        if any(k in m for k in ["design binder",
+                                  "design antibody", "design nanobody", "design adc",
+                                  "target.*binder"]) or \
+           (_re.search(r'target.*(binder|antibody|nanobody)', m)):
             if pdb_id or target_name:
                 job = f"binder_{(target_name or pdb_id).lower()}_{int(__import__('time').time())}"
                 args = {"job_name": job}
@@ -211,78 +208,78 @@ class QwenBioAgent:
                     args["target_name"] = target_name
                 return "binder_pipeline", [
                     {"name": "pocket_guided_binder_pipeline", "args": args},
-                ], f"正在启动 {target_name or pdb_id} binder 设计 pipeline..."
+                ], f"Starting {target_name or pdb_id} binder design pipeline..."
 
-        # ── 路由4: ADMET 预测 ──
-        if any(k in m for k in ["admet", "毒性", "溶解度", "toxicity", "solubility"]):
-            # 提取分子名：只取英文单词或中文药名（到"的"为止）
-            mol_match = _re.search(r'(?:of|for|预测|评估)\s*([a-zA-Z0-9_-]+|[\u4e00-\u9fff]+)', m)
+        # ── Route 4: ADMET prediction ──
+        if any(k in m for k in ["admet", "toxicity", "solubility"]):
+            # Extract molecule name
+            mol_match = _re.search(r'(?:of|for|predict|assess)\s*([a-zA-Z0-9_-]+)', m)
             mol_name = mol_match.group(1) if mol_match else None
             if mol_name:
-                mol_name = _ZH_MOL.get(mol_name, mol_name)
-                if mol_name and mol_name.lower() not in ["admet", "toxicity", "solubility", "毒性", "溶解度"]:
+                mol_name = _MOL_ALIASES.get(mol_name, mol_name)
+                if mol_name and mol_name.lower() not in ["admet", "toxicity", "solubility"]:
                     return "admet", [
                         {"name": "fetch_molecule", "args": {"query": mol_name}},
-                    ], f"正在获取 {mol_name}，准备 ADMET 预测..."
+                    ], f"Fetching {mol_name}, preparing ADMET prediction..."
 
-        # ── 路由5: 口袋检测 ──
-        if any(k in m for k in ["口袋", "pocket", "binding site", "结合位点", "fpocket", "p2rank", "检测口袋", "检测.*口袋"]):
+        # ── Route 5: Pocket detection ──
+        if any(k in m for k in ["pocket", "binding site", "fpocket", "p2rank", "detect pocket"]):
             if pdb_id:
                 return "pocket", [
                     {"name": "fetch_pdb", "args": {"pdb_id": pdb_id}},
-                ], f"正在下载 {pdb_id}，准备口袋检测..."
+                ], f"Downloading {pdb_id}, preparing pocket detection..."
 
-        # ── 路由6: 药物发现全流程 ──
-        if any(k in m for k in ["drug discovery", "药物发现", "全流程", "完整流程", "end to end"]):
-            mol_match = _re.search(r'(?:和|与|and|with|配体|ligand)\s*(\S+)', m)
+        # ── Route 6: Drug discovery full pipeline ──
+        if any(k in m for k in ["drug discovery", "full pipeline", "end to end"]):
+            mol_match = _re.search(r'(?:and|with|ligand)\s*(\S+)', m)
             mol_name = mol_match.group(1) if mol_match else None
             if pdb_id:
                 job = f"drugdisc_{pdb_id}_{int(__import__('time').time())}"
                 args = {"job_name": job, "pdb_id": pdb_id}
                 if mol_name:
-                    mol_name = _ZH_MOL.get(mol_name, mol_name)
+                    mol_name = _MOL_ALIASES.get(mol_name, mol_name)
                     args["ligand_name"] = mol_name
                 return "drug_discovery", [
                     {"name": "drug_discovery_pipeline", "args": args},
-                ], f"正在启动 {pdb_id} 药物发现全流程..."
+                ], f"Starting {pdb_id} drug discovery full pipeline..."
 
-        # ── 路由7: MD 模拟 ──
-        if any(k in m for k in ["分子动力学", "md simulation", "gromacs", "molecular dynamics", "md模拟", "动力学模拟", "模拟"]):
+        # ── Route 7: MD simulation ──
+        if any(k in m for k in ["md simulation", "gromacs", "molecular dynamics"]):
             if pdb_id:
                 return "md_simulation", [
                     {"name": "fetch_pdb", "args": {"pdb_id": pdb_id}},
-                ], f"正在下载 {pdb_id}，准备 MD 模拟..."
+                ], f"Downloading {pdb_id}, preparing MD simulation..."
 
-        # ── 路由8: 表位预测 ──
-        if any(k in m for k in ["表位", "epitope", "discotope", "b细胞", "b-cell", "表位预测", "预测表位"]):
+        # ── Route 8: Epitope prediction ──
+        if any(k in m for k in ["epitope", "discotope", "b-cell", "epitope prediction"]):
             if pdb_id:
                 return "epitope", [
                     {"name": "fetch_pdb", "args": {"pdb_id": pdb_id}},
-                ], f"正在下载 {pdb_id}，准备表位预测..."
+                ], f"Downloading {pdb_id}, preparing epitope prediction..."
 
-        # ── 路由9: PDB 下载 ──
-        if any(k in m for k in ["下载pdb", "download pdb", "fetch pdb", "获取pdb", "获取结构"]) or \
-           (any(k in m for k in ["下载", "download", "fetch"]) and pdb_id):
+        # ── Route 9: PDB download ──
+        if any(k in m for k in ["download pdb", "fetch pdb", "get pdb", "get structure"]) or \
+           (any(k in m for k in ["download", "fetch"]) and pdb_id):
             if pdb_id:
                 return "fetch_pdb", [
                     {"name": "fetch_pdb", "args": {"pdb_id": pdb_id}},
-                ], f"正在下载 PDB {pdb_id}..."
+                ], f"Downloading PDB {pdb_id}..."
 
-        # ── 路由10: 小分子获取 ──
-        if any(k in m for k in ["获取分子", "查找分子", "fetch molecule", "smiles", "查药物", "找药"]):
-            mol_match = _re.search(r'(?:获取|查找|fetch|find|查|找)\s*(?:分子|药物|molecule|drug)?\s*(\S+)', m)
+        # ── Route 10: Molecule retrieval ──
+        if any(k in m for k in ["fetch molecule", "find molecule", "smiles", "find drug"]):
+            mol_match = _re.search(r'(?:fetch|find|get)\s*(?:molecule|drug)?\s*(\S+)', m)
             mol_name = mol_match.group(1) if mol_match else None
-            if mol_name and mol_name not in ["分子", "药物", "molecule", "drug"]:
+            if mol_name and mol_name not in ["molecule", "drug"]:
                 return "fetch_molecule", [
                     {"name": "fetch_molecule", "args": {"query": mol_name}},
-                ], f"正在查找 {mol_name}..."
+                ], f"Searching for {mol_name}..."
 
-        # ── 路由11: 文献检索 ──
-        if any(k in m for k in ["文献", "论文", "literature", "paper", "pubmed", "搜索文献", "查文献"]):
+        # ── Route 11: Literature search ──
+        if any(k in m for k in ["literature", "paper", "pubmed", "search paper"]):
             query = m
             return "literature", [
                 {"name": "search_literature", "args": {"query": query}},
-            ], f"正在检索文献..."
+            ], f"Searching literature..."
 
         return None
 
@@ -294,7 +291,7 @@ class QwenBioAgent:
         # ── Simple message fast path: skip skills, thinking_budget=0 ──
         skip_skills = self.is_simple_message(user_message)
 
-        _SIMPLE_PROMPT = "你是OIH生物计算平台的AI助手，可以帮助用户进行蛋白质结构预测、药物设计、分子对接等计算生物学任务。用中文简短回复。不要透露服务器IP、GPU型号、内部路径等信息。"
+        _SIMPLE_PROMPT = "You are the AI assistant of the OIH computational biology platform. You help users with protein structure prediction, drug design, molecular docking, and other computational biology tasks. Reply concisely. Do not reveal server IPs, GPU models, or internal paths."
         if skip_skills:
             dynamic_system = _SIMPLE_PROMPT
             print(f"[Simple] Using short prompt")
@@ -303,13 +300,13 @@ class QwenBioAgent:
                 QWEN_SYSTEM_PROMPT, user_message
             )
             if detected_skills:
-                print(f"[Skills] 注入: {detected_skills}")
+                print(f"[Skills] Injected: {detected_skills}")
 
         max_iterations = 20   # prevent infinite loops
         iteration = 0
         tool_fail_count: Dict[str, int] = {}   # track consecutive failures per tool
 
-        # Thinking mode 关闭 — Qwen3 不用 thinking 也能正常工具调用，速度快很多
+        # Thinking mode disabled — Qwen3 works fine for tool calls without thinking, much faster
         thinking_budget = 0
         print(f"[Thinking] disabled (budget=0)")
 
@@ -355,8 +352,8 @@ class QwenBioAgent:
                 # ── Skip tools that have failed ≥2 times consecutively ────
                 if tool_fail_count.get(fn_name, 0) >= 2:
                     skip_msg = (
-                        f"工具 {fn_name} 已连续失败{tool_fail_count[fn_name]}次，"
-                        f"请跳过该步骤继续后续流程，不要再调用此工具。"
+                        f"Tool {fn_name} has failed {tool_fail_count[fn_name]} times consecutively. "
+                        f"Please skip this step and continue with the remaining workflow. Do not call this tool again."
                     )
                     print(f"     SKIPPED (consecutive failures={tool_fail_count[fn_name]})")
                     self.conversation_history.append(
@@ -416,7 +413,7 @@ class QwenBioAgent:
                 return {
                     "error": error_msg,
                     "task_id": task_id,
-                    "instruction": "分析上方error内容找出根本原因，修改参数后重试，不要用相同参数重试"
+                    "instruction": "Analyze the error above to find the root cause, modify parameters and retry. Do not retry with the same parameters."
                 }
 
         return {"error": f"Task {task_id} timed out after {max_wait}s"}
@@ -426,11 +423,11 @@ class QwenBioAgent:
         self._cancelled = False
         self.conversation_history.append({"role": "user", "content": user_message})
 
-        # ── 快速路由：固定流程直接执行，跳过 Qwen ──
+        # ── Fast route: execute fixed workflows directly, skip Qwen ──
         fast = self.detect_fast_route(user_message)
         if fast:
             route_name, tool_sequence, status_msg = fast
-            yield {"type": "status", "content": f"⚡ 快速路由: {status_msg}"}
+            yield {"type": "status", "content": f"⚡ Fast route: {status_msg}"}
 
             all_results = {}
             for step in tool_sequence:
@@ -463,10 +460,10 @@ class QwenBioAgent:
                 all_results[fn_name] = result
 
                 if is_error:
-                    yield {"type": "answer", "content": f"工具 {fn_name} 执行失败: {result.get('error', '')[:200]}"}
+                    yield {"type": "answer", "content": f"Tool {fn_name} execution failed: {result.get('error', '')[:200]}"}
                     return
 
-            # 快速路由后：把结果交给 Qwen 做一轮总结
+            # After fast route: pass results to Qwen for a summary round
             result_summary = json.dumps(all_results, ensure_ascii=False)[:3000]
             self.conversation_history.append({"role": "assistant", "content": None,
                 "tool_calls": [{"id": "fast_0", "type": "function",
@@ -474,11 +471,11 @@ class QwenBioAgent:
             self.conversation_history.append({"role": "tool", "tool_call_id": "fast_0",
                 "name": tool_sequence[0]["name"], "content": result_summary})
 
-            # 如果是 AF3 路由，第一步 fetch_pdb 成功后提取序列再提交 AF3
+            # If AF3 route, extract sequence from PDB after fetch_pdb succeeds, then submit AF3
             if route_name == "af3_predict" and "fetch_pdb" in all_results:
                 pdb_result = all_results["fetch_pdb"]
                 pdb_path = pdb_result.get("output_pdb", "")
-                # 从 PDB 文件提取序列
+                # Extract sequence from PDB file
                 seq = ""
                 if pdb_path:
                     try:
@@ -496,7 +493,7 @@ class QwenBioAgent:
                                         seq += aa3to1.get(resname, "X")
                     except Exception:
                         pass
-                    yield {"type": "status", "content": f"序列提取完成: {len(seq)}aa"}
+                    yield {"type": "status", "content": f"Sequence extracted: {len(seq)}aa"}
                 if seq and len(seq) > 10:
                     job_name = f"{pdb_result.get('pdb_id','af3')}_af3_predict"
                     af3_args = {"job_name": job_name, "chains": [{"type": "protein", "sequence": seq}], "num_seeds": 1}
@@ -519,12 +516,12 @@ class QwenBioAgent:
                                 break
                     yield {"type": "tool_result", "tool": "alphafold3_predict",
                            "success": af3_result.get("status") == "completed", "summary": str(af3_result)[:300]}
-                    yield {"type": "answer", "content": f"AF3 结构预测{'完成' if af3_result.get('status')=='completed' else '失败'}。"}
+                    yield {"type": "answer", "content": f"AF3 structure prediction {'completed' if af3_result.get('status')=='completed' else 'failed'}."}
                 else:
-                    yield {"type": "answer", "content": f"PDB {pdb_result.get('pdb_id')} 下载成功，但未获取到序列。请提供氨基酸序列以继续 AF3 预测。"}
+                    yield {"type": "answer", "content": f"PDB {pdb_result.get('pdb_id')} downloaded successfully, but no sequence could be extracted. Please provide an amino acid sequence to continue AF3 prediction."}
                 return
 
-            # 对接路由：fetch_pdb + fetch_molecule 都成功后自动调 dock_ligand
+            # Docking route: auto-call dock_ligand after both fetch_pdb + fetch_molecule succeed
             if route_name == "docking" and "fetch_pdb" in all_results and "fetch_molecule" in all_results:
                 pdb_r = all_results["fetch_pdb"]
                 mol_r = all_results["fetch_molecule"]
@@ -553,10 +550,10 @@ class QwenBioAgent:
                             break
                 yield {"type": "tool_result", "tool": "dock_ligand",
                        "success": dock_result.get("status") == "completed", "summary": str(dock_result)[:300]}
-                yield {"type": "answer", "content": f"对接{'完成' if dock_result.get('status')=='completed' else '失败'}。"}
+                yield {"type": "answer", "content": f"Docking {'completed' if dock_result.get('status')=='completed' else 'failed'}."}
                 return
 
-            # ── 口袋检测：fetch_pdb 后调 fpocket ──
+            # ── Pocket detection: call fpocket after fetch_pdb ──
             if route_name == "pocket" and "fetch_pdb" in all_results:
                 pdb_r = all_results["fetch_pdb"]
                 pocket_args = {"input_pdb": pdb_r.get("output_pdb", ""), "job_name": f"pocket_{pdb_r.get('pdb_id','')}"}
@@ -574,10 +571,10 @@ class QwenBioAgent:
                         if result.get("status") in ("completed", "failed"): break
                 yield {"type": "tool_result", "tool": "fpocket_detect_pockets",
                        "success": result.get("status") == "completed", "summary": str(result)[:300]}
-                yield {"type": "answer", "content": f"口袋检测{'完成' if result.get('status')=='completed' else '失败'}。"}
+                yield {"type": "answer", "content": f"Pocket detection {'completed' if result.get('status')=='completed' else 'failed'}."}
                 return
 
-            # ── 表位预测：fetch_pdb 后调 discotope3 ──
+            # ── Epitope prediction: call discotope3 after fetch_pdb ──
             if route_name == "epitope" and "fetch_pdb" in all_results:
                 pdb_r = all_results["fetch_pdb"]
                 dt3_args = {"input_pdb": pdb_r.get("output_pdb", ""), "job_name": f"epitope_{pdb_r.get('pdb_id','')}"}
@@ -595,10 +592,10 @@ class QwenBioAgent:
                         if result.get("status") in ("completed", "failed"): break
                 yield {"type": "tool_result", "tool": "discotope3_predict",
                        "success": result.get("status") == "completed", "summary": str(result)[:300]}
-                yield {"type": "answer", "content": f"表位预测{'完成' if result.get('status')=='completed' else '失败'}。"}
+                yield {"type": "answer", "content": f"Epitope prediction {'completed' if result.get('status')=='completed' else 'failed'}."}
                 return
 
-            # ── MD 模拟：fetch_pdb 后调 gromacs ──
+            # ── MD simulation: call gromacs after fetch_pdb ──
             if route_name == "md_simulation" and "fetch_pdb" in all_results:
                 pdb_r = all_results["fetch_pdb"]
                 md_args = {"input_pdb": pdb_r.get("output_pdb", ""), "job_name": f"md_{pdb_r.get('pdb_id','')}", "sim_time_ns": 10.0}
@@ -617,10 +614,10 @@ class QwenBioAgent:
                         if result.get("status") in ("completed", "failed"): break
                 yield {"type": "tool_result", "tool": "gromacs_md_simulation",
                        "success": result.get("status") == "completed", "summary": str(result)[:300]}
-                yield {"type": "answer", "content": f"MD 模拟{'完成' if result.get('status')=='completed' else '失败'}。"}
+                yield {"type": "answer", "content": f"MD simulation {'completed' if result.get('status')=='completed' else 'failed'}."}
                 return
 
-            # ── ADMET：fetch_molecule 后调 chemprop ──
+            # ── ADMET: call chemprop after fetch_molecule ──
             if route_name == "admet" and "fetch_molecule" in all_results:
                 mol_r = all_results["fetch_molecule"]
                 smiles = mol_r.get("smiles", "")
@@ -640,25 +637,25 @@ class QwenBioAgent:
                             if result.get("status") in ("completed", "failed"): break
                     yield {"type": "tool_result", "tool": "chemprop_predict",
                            "success": result.get("status") == "completed", "summary": str(result)[:300]}
-                    yield {"type": "answer", "content": f"ADMET 预测{'完成' if result.get('status')=='completed' else '失败'}。"}
+                    yield {"type": "answer", "content": f"ADMET prediction {'completed' if result.get('status')=='completed' else 'failed'}."}
                     return
 
-            # 其他路由（binder/drug_discovery pipeline、文献、下载）：工具已直接执行完毕
-            yield {"type": "answer", "content": f"任务已提交，请在左侧面板查看进度。"}
+            # Other routes (binder/drug_discovery pipeline, literature, download): tools already executed
+            yield {"type": "answer", "content": f"Task submitted. Check progress in the left panel."}
             return
 
         skip_skills = self.is_simple_message(user_message)
 
-        _SIMPLE_PROMPT = "你是OIH生物计算平台的AI助手，可以帮助用户进行蛋白质结构预测、药物设计、分子对接等计算生物学任务。用中文简短回复。不要透露服务器IP、GPU型号、内部路径等信息。"
+        _SIMPLE_PROMPT = "You are the AI assistant of the OIH computational biology platform. You help users with protein structure prediction, drug design, molecular docking, and other computational biology tasks. Reply concisely. Do not reveal server IPs, GPU models, or internal paths."
         if skip_skills:
             dynamic_system = _SIMPLE_PROMPT
-            yield {"type": "status", "content": "快速回复模式..."}
+            yield {"type": "status", "content": "Quick reply mode..."}
         else:
             dynamic_system, detected_skills = build_dynamic_system_prompt(
                 QWEN_SYSTEM_PROMPT, user_message
             )
             if detected_skills:
-                yield {"type": "status", "content": f"已加载知识: {', '.join(detected_skills)}"}
+                yield {"type": "status", "content": f"Loaded knowledge: {', '.join(detected_skills)}"}
 
         max_iterations = 20
         iteration = 0
@@ -666,7 +663,7 @@ class QwenBioAgent:
 
         thinking_budget = 0  # thinking mode disabled for speed
 
-        yield {"type": "thinking", "content": "Qwen 正在推理..."}
+        yield {"type": "thinking", "content": "LLM is reasoning..."}
 
         while iteration < max_iterations:
             iteration += 1
@@ -703,7 +700,7 @@ class QwenBioAgent:
                 yield {"type": "tool_call", "tool": fn_name, "args": fn_args}
 
                 if tool_fail_count.get(fn_name, 0) >= 2:
-                    skip_msg = f"工具 {fn_name} 已连续失败{tool_fail_count[fn_name]}次，跳过。"
+                    skip_msg = f"Tool {fn_name} has failed {tool_fail_count[fn_name]} times consecutively, skipping."
                     yield {"type": "tool_skip", "tool": fn_name, "reason": skip_msg}
                     self.conversation_history.append(
                         self._llm_backend.build_tool_result_message(
@@ -751,7 +748,7 @@ class QwenBioAgent:
                 self.conversation_history.append(
                     self._llm_backend.build_tool_result_message(tc.id, fn_name, result_str))
 
-            yield {"type": "thinking", "content": f"LLM 正在分析结果 (轮次 {iteration+1})..."}
+            yield {"type": "thinking", "content": f"LLM analyzing results (round {iteration+1})..."}
 
         yield {"type": "answer", "content": "Agent exceeded max iterations. Please check task status manually."}
 
@@ -786,13 +783,13 @@ import tempfile
 # CCD codes → human-readable PTM type
 _PTM_CCD_MAP = {
     # Glycosylation
-    "NAG": "糖基化(N-GlcNAc)", "FUC": "糖基化(Fucose)", "MAN": "糖基化(Mannose)",
-    "BMA": "糖基化(β-Mannose)", "GAL": "糖基化(Galactose)", "SIA": "糖基化(Sialic acid)",
+    "NAG": "Glycosylation(N-GlcNAc)", "FUC": "Glycosylation(Fucose)", "MAN": "Glycosylation(Mannose)",
+    "BMA": "Glycosylation(β-Mannose)", "GAL": "Glycosylation(Galactose)", "SIA": "Glycosylation(Sialic acid)",
     # Phosphorylation
-    "SEP": "磷酸化(pSer)", "TPO": "磷酸化(pThr)", "PTR": "磷酸化(pTyr)",
+    "SEP": "Phosphorylation(pSer)", "TPO": "Phosphorylation(pThr)", "PTR": "Phosphorylation(pTyr)",
     # Others
-    "MLY": "甲基化(Lys)", "M3L": "三甲基化(Lys)", "ALY": "乙酰化(Lys)",
-    "CSO": "氧化(Cys)", "OCS": "氧化(Cys)",
+    "MLY": "Methylation(Lys)", "M3L": "Trimethylation(Lys)", "ALY": "Acetylation(Lys)",
+    "CSO": "Oxidation(Cys)", "OCS": "Oxidation(Cys)",
 }
 
 def detect_ptm(pdb_content: str) -> Dict[str, Any]:
@@ -800,7 +797,7 @@ def detect_ptm(pdb_content: str) -> Dict[str, Any]:
     Parse PDB content to detect PTMs, disulfide bonds, and chain/sequence info.
     Returns structured dict — does NOT modify any existing agent state.
     """
-    ptms = []          # [{"type": "糖基化", "ccd": "NAG", "chain": "A", "resseq": 297}, ...]
+    ptms = []          # [{"type": "Glycosylation", "ccd": "NAG", "chain": "A", "resseq": 297}, ...]
     disulfides = []    # [{"chain1": "A", "res1": 42, "chain2": "A", "res2": 98}, ...]
     chains = {}        # {"A": "MKTIIALSYIFCLVFA...", ...}
     het_residues = []  # non-PTM HETATM residues
@@ -887,8 +884,8 @@ def generate_tool_inputs(
         pdb_path = os.path.join(upload_dir, filename or "upload.pdb")
         with open(pdb_path, "w") as f:
             f.write(pdb_content)
-        context_parts.append(f"[用户上传文件: {file_label}]")
-        context_parts.append(f"[PDB文件已保存: {pdb_path}]")
+        context_parts.append(f"[User uploaded file: {file_label}]")
+        context_parts.append(f"[PDB file saved: {pdb_path}]")
 
         # ── PTM detection ──
         ptm_result = detect_ptm(pdb_content)
@@ -906,12 +903,12 @@ def generate_tool_inputs(
                 positions = [f"{p['chain']}{p['resseq']}" for p in ptms if p["type"] == ptype]
                 ptm_summary_parts.append(f"{ptype}×{cnt}({','.join(positions)})")
         if disulfides:
-            ptm_summary_parts.append(f"二硫键×{len(disulfides)}")
+            ptm_summary_parts.append(f"Disulfide bonds×{len(disulfides)}")
 
         if ptm_summary_parts:
-            context_parts.append(f"[PTM检测: {', '.join(ptm_summary_parts)}]")
+            context_parts.append(f"[PTM detection: {', '.join(ptm_summary_parts)}]")
         else:
-            context_parts.append("[PTM检测: 无修饰]")
+            context_parts.append("[PTM detection: no modifications]")
 
         # ── Generate AF3 input JSON ──
         af3_chains = []
@@ -927,7 +924,7 @@ def generate_tool_inputs(
             af3_chains.append(chain_entry)
 
         # Add glycan ligands as separate CCD ligand entries
-        glycan_ccds = [p["ccd"] for p in ptms if "糖基化" in p["type"]]
+        glycan_ccds = [p["ccd"] for p in ptms if "Glycosylation" in p["type"]]
         for ccd in set(glycan_ccds):
             af3_chains.append({"type": "ligand", "ccdCodes": [ccd], "count": glycan_ccds.count(ccd)})
 
@@ -943,10 +940,10 @@ def generate_tool_inputs(
         # ── Generate GROMACS PTM notes ──
         gromacs_notes = {
             "pdb_path": pdb_path,
-            "force_field": "charmm36" if any("磷酸化" in p["type"] for p in ptms) else "amber99sb-ildn",
+            "force_field": "charmm36" if any("Phosphorylation" in p["type"] for p in ptms) else "amber99sb-ildn",
             "disulfide_pairs": [[d["res1"], d["res2"]] for d in disulfides],
-            "unsupported_ptms": [p["type"] for p in ptms if "糖基化" in p["type"]],
-            "note": "糖基化残基需要GLYCAM力场，GROMACS不支持，建议仅用AF3预测" if any("糖基化" in p["type"] for p in ptms) else "",
+            "unsupported_ptms": [p["type"] for p in ptms if "Glycosylation" in p["type"]],
+            "note": "Glycosylated residues require GLYCAM force field, not supported by GROMACS. Use AF3 prediction only." if any("Glycosylation" in p["type"] for p in ptms) else "",
         }
         gromacs_path = os.path.join(upload_dir, "gromacs_ptm_notes.json")
         with open(gromacs_path, "w") as f:
@@ -962,19 +959,19 @@ def generate_tool_inputs(
             adc_input = {
                 "pdb_path": pdb_path,
                 "candidate_conjugation_sites": [f"C{c['position']}" for c in cys_positions[:10]],
-                "note": "需要先用freesasa确认SASA>40Å²再选择偶联位点",
+                "note": "Must confirm SASA>40A^2 with FreeSASA before selecting conjugation sites",
             }
             adc_path = os.path.join(upload_dir, "adc_input.json")
             with open(adc_path, "w") as f:
                 json.dump(adc_input, f, indent=2, ensure_ascii=False)
 
         # ── Context: generated files ──
-        context_parts.append("[已生成工具输入:]")
+        context_parts.append("[Generated tool inputs:]")
         context_parts.append(f"- AF3: {af3_path}")
         context_parts.append(f"- GROMACS: {gromacs_path}")
         if cys_positions:
             context_parts.append(f"- ADC: {os.path.join(upload_dir, 'adc_input.json')}")
-        context_parts.append("[Qwen直接使用以上路径，无需重新构建输入]")
+        context_parts.append("[LLM can use the above paths directly, no need to rebuild inputs]")
 
     # ── FASTA sequence ──
     if fasta_sequence:
@@ -984,13 +981,13 @@ def generate_tool_inputs(
                 f.write(f">uploaded_sequence\n{fasta_sequence}\n")
             else:
                 f.write(fasta_sequence)
-        context_parts.append(f"[用户上传FASTA序列: {fasta_path}]")
-        context_parts.append("[无结构文件，建议先用alphafold3预测结构]")
+        context_parts.append(f"[User uploaded FASTA sequence: {fasta_path}]")
+        context_parts.append("[No structure file available. Recommend using AlphaFold3 to predict structure first.]")
 
     # ── SMILES ──
     if smiles:
-        context_parts.append(f"[用户上传SMILES: {smiles}]")
-        context_parts.append("[建议先用chemprop预测ADMET属性，再用于对接]")
+        context_parts.append(f"[User uploaded SMILES: {smiles}]")
+        context_parts.append("[Recommend predicting ADMET properties with Chemprop first, then use for docking.]")
 
     if not context_parts:
         return ""

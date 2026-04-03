@@ -29,15 +29,15 @@ def extract_cases(tasks_dir: str, output_file: str):
 
         if error:
             cases.append({
-                "input": f"工具={tool} 错误={error[:200]}",
-                "reasoning": "",  # 待人工填写
-                "action": "",     # 待人工填写
+                "input": f"tool={tool} error={error[:200]}",
+                "reasoning": "",  # to be filled manually
+                "action": "",     # to be filled manually
                 "outcome": status,
             })
         elif result and status == "completed":
             result_summary = json.dumps(result, ensure_ascii=False)[:300]
             cases.append({
-                "input": f"工具={tool} 成功",
+                "input": f"tool={tool} success",
                 "reasoning": "",
                 "action": result_summary,
                 "outcome": "success",
@@ -47,7 +47,7 @@ def extract_cases(tasks_dir: str, output_file: str):
     with open(output_file, "w") as f:
         for c in cases:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
-    print(f"收集了 {len(cases)} 个案例 → {output_file}")
+    print(f"Collected {len(cases)} cases -> {output_file}")
 
 
 if __name__ == "__main__":

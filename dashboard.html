@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -127,10 +127,10 @@ const API="http://192.168.31.23:8080";
 
 /* ── constants ────────────────────────────────────────────────────────────── */
 const EXAMPLES=[
-  {icon:"🧬",text:"设计靶向HER2的ADC，payload用MMAE"},
-  {icon:"🔬",text:"设计能结合CD36的纳米抗体"},
-  {icon:"💊",text:"找PD-L1小分子抑制剂并评估ADMET"},
-  {icon:"🎯",text:"预测EGFR突变体与osimertinib的结合"},
+  {icon:"🧬",text:"Design an ADC targeting HER2 with MMAE payload"},
+  {icon:"🔬",text:"Design a nanobody that binds CD36"},
+  {icon:"💊",text:"Find PD-L1 small molecule inhibitors and assess ADMET"},
+  {icon:"🎯",text:"Predict EGFR mutant binding to osimertinib"},
 ];
 
 const ST={
@@ -142,7 +142,7 @@ const ST={
 
 /* ── Pipeline Preview configs ─────────────────────────────────────────────── */
 const PIPELINE_PATTERNS=[
-  {re:/pocket.guided|自动.*口袋.*binder|find.*pocket.*design/i,name:'Pocket-Guided Binder + ADC (16-step, 6D scoring)',steps:[
+  {re:/pocket.guided|auto.*pocket.*binder|find.*pocket.*design/i,name:'Pocket-Guided Binder + ADC (16-step, 6D scoring)',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'📚',name:'RAG Literature',time:'~5s'},
     {icon:'🕳️',name:'Fpocket+P2Rank',time:'~1min'},{icon:'🎯',name:'DiscoTope3',time:'~2min'},
     {icon:'📍',name:'FreeSASA',time:'~1min'},{icon:'🧮',name:'6D Scoring',time:'~5s'},
@@ -152,40 +152,40 @@ const PIPELINE_PATTERNS=[
     {icon:'📍',name:'FreeSASA ADC',time:'~1min'},{icon:'🔗',name:'Linker',time:'~1min'},
     {icon:'💊',name:'MMAE',time:'~1min'},{icon:'⚗️',name:'ADC DAR=4',time:'~2min'},
   ]},
-  {re:/ADC|抗体|nanobody|binder|adc/i,name:'Binder Design + ADC (Tier-aware)',steps:[
+  {re:/ADC|antibody|nanobody|binder|adc/i,name:'Binder Design + ADC (Tier-aware)',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🔍',name:'Tier Classify',time:'~5s'},
     {icon:'🎯',name:'Interface Extract',time:'~5s'},{icon:'🧬',name:'RFdiffusion',time:'~20min'},
     {icon:'🔤',name:'ProteinMPNN',time:'~5min'},{icon:'📊',name:'ESM2 Filter',time:'~5min'},
     {icon:'🔬',name:'AlphaFold3',time:'~15min'},{icon:'📍',name:'FreeSASA',time:'~1min'},
     {icon:'🔗',name:'NHS-PEG4',time:'~1min'},{icon:'⚗️',name:'ADC DAR=4',time:'~2min'},
   ]},
-  {re:/drug discovery|药物发现/i,name:'Drug Discovery Pipeline',steps:[
+  {re:/drug discovery/i,name:'Drug Discovery Pipeline',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🕳️',name:'fpocket',time:'~2min'},
     {icon:'💊',name:'Fetch Molecule',time:'~1min'},{icon:'🎯',name:'GNINA Docking',time:'~10min'},
     {icon:'🔬',name:'AlphaFold3',time:'~15min'},{icon:'🌊',name:'GROMACS MD',time:'~30min'},
   ]},
-  {re:/对接|docking|GNINA|AutoDock/i,name:'Molecular Docking',steps:[
+  {re:/docking|GNINA|AutoDock/i,name:'Molecular Docking',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🕳️',name:'fpocket',time:'~2min'},
     {icon:'💊',name:'Fetch Molecule',time:'~1min'},{icon:'🎯',name:'Docking',time:'~10min'},
   ]},
-  {re:/筛选|virtual screening|ZINC/i,name:'Virtual Screening',steps:[
+  {re:/virtual screening|ZINC/i,name:'Virtual Screening',steps:[
     {icon:'🕳️',name:'fpocket',time:'~2min'},{icon:'🧪',name:'Chemprop ADMET',time:'~10min'},
     {icon:'🎯',name:'AutoDock-GPU',time:'~60min'},{icon:'📊',name:'Result Ranking',time:'~1min'},
   ]},
-  {re:/MD|分子动力学|GROMACS/i,name:'MD Simulation',steps:[
+  {re:/MD|molecular dynamics|GROMACS/i,name:'MD Simulation',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'💊',name:'Fetch Molecule',time:'~1min'},
     {icon:'🎯',name:'Docking',time:'~10min'},{icon:'🌊',name:'GROMACS MD',time:'~30min'},
   ]},
-  {re:/ADMET|毒性|chemprop/i,name:'ADMET Prediction',steps:[
+  {re:/ADMET|toxicity|chemprop/i,name:'ADMET Prediction',steps:[
     {icon:'💊',name:'Fetch Molecule',time:'~1min'},{icon:'🧪',name:'Chemprop',time:'~5min'},
   ]},
-  {re:/fpocket|口袋检测|pocket detect/i,name:'Pocket Detection (Fpocket)',steps:[
+  {re:/fpocket|pocket detection|pocket detect/i,name:'Pocket Detection (Fpocket)',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🕳️',name:'Fpocket',time:'~1min'},
   ]},
   {re:/p2rank|ML.*pocket|pocket.*predict/i,name:'Pocket Prediction (P2Rank)',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'🧠',name:'P2Rank',time:'~1min'},
   ]},
-  {re:/diffdock|盲对接|blind dock/i,name:'Blind Docking (DiffDock)',steps:[
+  {re:/diffdock|blind docking|blind dock/i,name:'Blind Docking (DiffDock)',steps:[
     {icon:'📥',name:'Fetch PDB',time:'~1min'},{icon:'💊',name:'Fetch Molecule',time:'~1min'},
     {icon:'🎲',name:'DiffDock',time:'~10min'},
   ]},
@@ -441,7 +441,7 @@ function Viewer3DPersistent({viewer3d,visible,path}){
             pointerEvents:'none',lineHeight:1.6}}>
             {styleIdx>=1&&<><span style={{color:'#00DDDD'}}>{'\u25A0'}</span> Binder &nbsp;<span style={{color:'#FF8C00'}}>{'\u25A0'}</span> Antigen<br/></>}
             {styleIdx===3&&<><span style={{color:'#FF4444'}}>{'\u25A0'}</span> Contact(A) &nbsp;<span style={{color:'#FFD700'}}>{'\u25A0'}</span> Contact(B)<br/></>}
-            {'\u5DE6\u952E\u65CB\u8F6C \u00B7 \u53F3\u952E\u5E73\u79FB \u00B7 \u6EDA\u8F6E\u7F29\u653E'}
+            {'Left-click rotate \u00B7 Right-click pan \u00B7 Scroll to zoom'}
           </div>
         </div>
         {/* Interface analysis panel — only in contact mode */}
@@ -503,7 +503,7 @@ function ChartBox({config,height=250,summary}){
   </div>);
 }
 function noDataPlaceholder(label){
-  return <div className="flex items-center justify-center text-[#94a3b8] text-xs font-mono" style={{height:'120px'}}>暂无{label}数据</div>;
+  return <div className="flex items-center justify-center text-[#94a3b8] text-xs font-mono" style={{height:'120px'}}>No {label} data available</div>;
 }
 /* chart theme defaults */
 const chartScaleDefaults={
@@ -966,17 +966,17 @@ function App(){
   // parse PTM info from assistant response
   const parsePtmCard=(text)=>{
     const lines=[];
-    const ptmMatch=text.match(/\[PTM检测[：:]?\s*([^\]]+)\]/);
-    if(ptmMatch)lines.push({type:'title',text:'🔬 PTM 检测结果'});
+    const ptmMatch=text.match(/\[PTM[Dd]etect(?:ion)?[：:]?\s*([^\]]+)\]/);
+    if(ptmMatch)lines.push({type:'title',text:'🔬 PTM Detection Results'});
     // extract individual items
-    const items=[...text.matchAll(/(?:糖基化|磷酸化|二硫键|甲基化|乙酰化)[^,\]）]*/g)];
+    const items=[...text.matchAll(/(?:glycosylation|phosphorylation|disulfide bond|methylation|acetylation)[^,\]）]*/gi)];
     items.forEach(m=>{
       const t=m[0];
-      if(t.includes('不支持')||t.includes('GROMACS'))lines.push({type:'warn',text:'⚠️ '+t});
+      if(t.includes('not supported')||t.includes('GROMACS'))lines.push({type:'warn',text:'⚠️ '+t});
       else lines.push({type:'ok',text:'✅ '+t});
     });
     const files=[...text.matchAll(/(?:af3_input|gromacs_ptm_notes|adc_input)\.json/g)];
-    files.forEach(m=>lines.push({type:'file',text:'📁 已生成 '+m[0]}));
+    files.forEach(m=>lines.push({type:'file',text:'📁 Generated '+m[0]}));
     return lines.length>1?lines:null;
   };
 
@@ -1146,7 +1146,7 @@ function App(){
     // build attachment summary for user bubble
     const attachLabels=[];
     if(attachPdb)attachLabels.push(`📄 ${attachPdb.filename}`);
-    if(attachFasta)attachLabels.push(`🧬 序列 ${attachFasta.replace(/^>[^\n]*\n/,'').replace(/\s/g,'').length}aa`);
+    if(attachFasta)attachLabels.push(`🧬 Sequence ${attachFasta.replace(/^>[^\n]*\n/,'').replace(/\s/g,'').length}aa`);
     if(attachSmiles)attachLabels.push(`💊 ${attachSmiles.length>30?attachSmiles.slice(0,27)+'...':attachSmiles}`);
     const userEntry={role:'user',content:msg,attachLabels:attachLabels.length?attachLabels:null};
     setChat(h=>[...h,userEntry]);
@@ -1835,7 +1835,7 @@ function App(){
             {rmsdChart?<ChartBox config={rmsdChart} height={220}/>:null}
             {energyChart?<ChartBox config={energyChart} height={220}/>:null}
             {!hasRmsd&&!hasEnergy&&(<div className="glass rounded-lg p-3 text-xs text-[#a0aec0] font-mono">
-              <p>MD 轨迹文件已生成，可下载后用 gmx rms / gmx energy 分析</p>
+              <p>MD trajectory files generated. Download and analyze with gmx rms / gmx energy.</p>
               {r.output_files&&Object.entries(r.output_files).map(([k,v])=><div key={k} className="mt-1">{k}: {_path(v)}</div>)}
             </div>)}
           </div>);
@@ -2175,7 +2175,7 @@ function App(){
             {(attachPdb||attachFasta||attachSmiles)&&(
               <div className="flex flex-wrap gap-1.5 mb-2 px-1">
                 {attachPdb&&<span className="attach-tag">📄 {attachPdb.filename} <span className="tag-close" onClick={()=>setAttachPdb(null)}>×</span></span>}
-                {attachFasta&&<span className="attach-tag">🧬 序列 {attachFasta.replace(/^>[^\n]*\n/,'').replace(/\s/g,'').length}aa <span className="tag-close" onClick={()=>setAttachFasta(null)}>×</span></span>}
+                {attachFasta&&<span className="attach-tag">🧬 Sequence {attachFasta.replace(/^>[^\n]*\n/,'').replace(/\s/g,'').length}aa <span className="tag-close" onClick={()=>setAttachFasta(null)}>×</span></span>}
                 {attachSmiles&&<span className="attach-tag">💊 {attachSmiles.length>25?attachSmiles.slice(0,22)+'...':attachSmiles} <span className="tag-close" onClick={()=>setAttachSmiles(null)}>×</span></span>}
               </div>
             )}
@@ -2189,13 +2189,13 @@ function App(){
                 {showAttachMenu&&(
                   <div className="attach-menu glass-strong rounded-xl overflow-hidden">
                     <button onClick={()=>{pdbInputRef.current?.click()}}>
-                      <span>📂</span><span>上传 PDB / CIF</span>
+                      <span>📂</span><span>Upload PDB / CIF</span>
                     </button>
                     <button onClick={()=>{setShowAttachMenu(false);setPasteModal('fasta');setPasteValue(attachFasta||'')}}>
-                      <span>🧬</span><span>粘贴 FASTA 序列</span>
+                      <span>🧬</span><span>Paste FASTA Sequence</span>
                     </button>
                     <button onClick={()=>{setShowAttachMenu(false);setPasteModal('smiles');setPasteValue(attachSmiles||'')}}>
-                      <span>💊</span><span>粘贴 SMILES</span>
+                      <span>💊</span><span>Paste SMILES</span>
                     </button>
                   </div>
                 )}
@@ -2357,7 +2357,7 @@ function App(){
         <div className="paste-modal" onClick={e=>{if(e.target===e.currentTarget){setPasteModal(null);setPasteValue('')}}}>
           <div className="paste-modal-inner">
             <h3 className="text-sm font-title font-semibold text-[#e2e8f0] mb-3">
-              {pasteModal==='fasta'?'🧬 粘贴 FASTA 序列':'💊 粘贴 SMILES'}
+              {pasteModal==='fasta'?'🧬 Paste FASTA Sequence':'💊 Paste SMILES'}
             </h3>
             {pasteModal==='fasta'
               ?<textarea value={pasteValue} onChange={e=>setPasteValue(e.target.value)}
@@ -2371,9 +2371,9 @@ function App(){
             }
             <div className="flex justify-end gap-2 mt-3">
               <button onClick={()=>{setPasteModal(null);setPasteValue('')}}
-                className="px-4 py-1.5 text-xs font-mono text-[#a0aec0] hover:text-[#e2e8f0] transition-all">取消</button>
+                className="px-4 py-1.5 text-xs font-mono text-[#a0aec0] hover:text-[#e2e8f0] transition-all">Cancel</button>
               <button onClick={confirmPaste} disabled={!pasteValue.trim()}
-                className="px-4 py-1.5 text-xs font-mono bg-cyan/15 text-cyan border border-cyan/30 rounded-lg hover:bg-cyan/25 disabled:opacity-30 transition-all">确认</button>
+                className="px-4 py-1.5 text-xs font-mono bg-cyan/15 text-cyan border border-cyan/30 rounded-lg hover:bg-cyan/25 disabled:opacity-30 transition-all">Confirm</button>
             </div>
           </div>
         </div>

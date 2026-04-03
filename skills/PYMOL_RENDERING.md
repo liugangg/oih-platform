@@ -1,51 +1,51 @@
-# PyMOL Rendering -- 结构可视化操作规程
+# PyMOL Rendering -- Structure Visualization Protocol
 
-## 环境
-- 安装: `pip install pymol-open-source` (已装在 `/data/oih/miniconda/`)
-- 命令行无头渲染: `/data/oih/miniconda/bin/pymol -cq script.py`
-- 不需要 X11/display，`-cq` = command-line + quiet
+## Environment
+- Installation: `pip install pymol-open-source` (installed in `/data/oih/miniconda/`)
+- Command-line headless rendering: `/data/oih/miniconda/bin/pymol -cq script.py`
+- No X11/display needed, `-cq` = command-line + quiet
 
-## 标准发布设置 (Nature Communications)
+## Standard Publication Settings (Nature Communications)
 ```python
 from pymol import cmd
 
-# 白色背景，无阴影
+# White background, no shadows
 cmd.set("cartoon_fancy_helices", 1)
 cmd.set("ray_opaque_background", 1)
 cmd.bg_color("white")
 cmd.set("ray_shadows", 0)
 cmd.set("antialias", 2)
 
-# 渲染
+# Render
 cmd.orient("object_name")
 cmd.ray(2400, 1800)
 cmd.png("/data/oih/outputs/paper_figures/output.png", dpi=300)
 cmd.quit()
 ```
 
-## 常用操作
+## Common Operations
 
-### 加载与清理
+### Load and Clean
 ```python
 cmd.load("/data/oih/outputs/fetch_pdb/XXXX.pdb", "protein")
-cmd.remove("resn HOH")       # 移除水分子
-cmd.remove("hetatm")         # 移除配体/离子
-cmd.remove("not chain A")    # 只保留目标链
+cmd.remove("resn HOH")       # Remove water molecules
+cmd.remove("hetatm")         # Remove ligands/ions
+cmd.remove("not chain A")    # Keep only the target chain
 ```
 
-### 显示模式
+### Display Modes
 ```python
-cmd.show("cartoon", "protein")       # cartoon 主体
-cmd.show("sticks", "selection")      # 侧链棍棒
-cmd.show("spheres", "selection")     # 球体高亮
-cmd.show("surface", "protein")       # 表面
-cmd.hide("everything", "selection")  # 隐藏
+cmd.show("cartoon", "protein")       # Cartoon backbone
+cmd.show("sticks", "selection")      # Side chain sticks
+cmd.show("spheres", "selection")     # Sphere highlights
+cmd.show("surface", "protein")       # Surface
+cmd.hide("everything", "selection")  # Hide
 ```
 
-### 颜色方案
-- 基底色: `gray80` (浅灰) 或 `gray70` (深灰)
-- 高亮色: `marine` (蓝), `red`, `yellow`, `cyan`, `orange`, `lightpink`
-- 错误标记: `red` (wrong), `marine` (correct)
+### Color Scheme
+- Base color: `gray80` (light gray) or `gray70` (dark gray)
+- Highlight color: `marine` (blue), `red`, `yellow`, `cyan`, `orange`, `lightpink`
+- Error markers: `red` (wrong), `marine` (correct)
 
 ```python
 cmd.color("gray80", "protein")
@@ -53,43 +53,43 @@ cmd.color("marine", "domain_selection")
 cmd.color("yellow", "hotspot_selection")
 ```
 
-### 选择残基
+### Select Residues
 ```python
-# 按残基编号
+# By residue number
 cmd.select("hotspots", "resi 558+560+571+572+573 and chain C")
-# 按残基范围
+# By residue range
 cmd.select("domain4", "resi 510-630 and chain C")
-# 按残基类型
+# By residue type
 cmd.select("lysines", "resn LYS and resi 188")
 ```
 
-### 对齐叠加
+### Alignment/Superposition
 ```python
 cmd.align("mobile_object and chain X", "target_object and chain Y")
 ```
 
-### 透明幽灵叠加
+### Transparent Ghost Overlay
 ```python
 cmd.set("cartoon_transparency", 0.65, "ghost_object")
 cmd.color("lightpink", "ghost_object")
 ```
 
-### 球体热点可视化
+### Sphere Hotspot Visualization
 ```python
 cmd.show("spheres", "hotspots")
-cmd.set("sphere_scale", 0.4, "hotspots")  # 0.4-0.6 适合热点
+cmd.set("sphere_scale", 0.4, "hotspots")  # 0.4-0.6 suitable for hotspots
 ```
 
-### 标签
+### Labels
 ```python
 cmd.set("label_size", 18)
 cmd.set("label_color", "red", "selection")
 ```
 
-## 实战模板
+## Practical Templates
 
-### 模板 1: 单蛋白域高亮 (EGFR fig2c 模式)
-用途: 展示蛋白不同域，标记正确/错误热点
+### Template 1: Single Protein Domain Highlighting (EGFR fig2c style)
+Purpose: Display different protein domains, mark correct/incorrect hotspots
 ```python
 from pymol import cmd
 
@@ -101,12 +101,12 @@ cmd.remove("not chain A")
 cmd.show("cartoon", "egfr")
 cmd.color("gray80", "egfr")
 
-# 错误热点 - 红色
+# Incorrect hotspots - red
 cmd.select("wrong", "resi 86-89 and chain A")
 cmd.color("red", "wrong")
 cmd.show("sticks", "wrong")
 
-# 正确热点 - 蓝色
+# Correct hotspots - blue
 cmd.select("correct", "resi 353+355+382+384+408+410 and chain A")
 cmd.color("marine", "correct")
 cmd.show("sticks", "correct")
@@ -122,8 +122,8 @@ cmd.png("/data/oih/outputs/paper_figures/output.png", dpi=300)
 cmd.quit()
 ```
 
-### 模板 2: 域高亮 + 热点球体 (HER2 fig2d 模式)
-用途: 展示蛋白域 + 球体标记药物结合热点
+### Template 2: Domain Highlighting + Hotspot Spheres (HER2 fig2d style)
+Purpose: Display protein domains + sphere markers for drug binding hotspots
 ```python
 from pymol import cmd
 
@@ -134,11 +134,11 @@ cmd.remove("not chain C")
 cmd.show("cartoon", "her2")
 cmd.color("gray70", "her2")
 
-# Domain IV 高亮
+# Domain IV highlight
 cmd.select("domain4", "resi 510-630 and chain C")
 cmd.color("marine", "domain4")
 
-# Hotspot 球体
+# Hotspot spheres
 cmd.select("hotspots", "resi 558+560+571+572+573 and chain C")
 cmd.color("yellow", "hotspots")
 cmd.show("sticks", "hotspots")
@@ -156,40 +156,40 @@ cmd.png("/data/oih/outputs/paper_figures/output.png", dpi=300)
 cmd.quit()
 ```
 
-### 模板 3: 复合物叠加对比 (fig5d 模式)
-用途: 设计的 binder 与已知抗体叠加比较
+### Template 3: Complex Superposition Comparison (fig5d style)
+Purpose: Overlay designed binder with known antibody for comparison
 ```python
 import glob
 from pymol import cmd
 
-# 加载设计复合物
+# Load designed complex
 cif = glob.glob("/data/oih/outputs/job_name/alphafold3/job_name/*_model.cif")
 cmd.load(cif[0], "designed")
 
-# 加载参考抗体
+# Load reference antibody
 cmd.load("/data/oih/outputs/fetch_pdb/1N8Z.pdb", "reference")
 
-# 设计复合物着色
+# Designed complex coloring
 cmd.show("cartoon", "designed")
 cmd.select("des_binder", "designed and chain A")
 cmd.select("des_antigen", "designed and chain B")
 cmd.color("cyan", "des_binder")
 cmd.color("orange", "des_antigen")
 
-# 参考抗体: 半透明粉色幽灵
+# Reference antibody: semi-transparent pink ghost
 cmd.show("cartoon", "reference and chain A")
 cmd.show("cartoon", "reference and chain B")
 cmd.color("lightpink", "reference")
 cmd.set("cartoon_transparency", 0.65, "reference")
 
-# 隐藏参考中不需要的链
+# Hide unneeded chains from reference
 cmd.hide("everything", "reference and chain C")
 cmd.hide("everything", "reference and chain D")
 
-# 对齐: 参考抗原链对齐到设计抗原链
+# Align: reference antigen chain to designed antigen chain
 cmd.align("reference and chain C", "des_antigen")
 
-# 关键残基标记 (如偶联位点 K188)
+# Key residue markers (e.g. conjugation site K188)
 cmd.select("k188", "des_binder and resn LYS and resi 188")
 cmd.show("spheres", "k188")
 cmd.color("red", "k188")
@@ -206,15 +206,15 @@ cmd.png("/data/oih/outputs/paper_figures/output.png", dpi=300)
 cmd.quit()
 ```
 
-## 输出
-- 所有图片保存到 `/data/oih/outputs/paper_figures/`
-- 命名约定: `fig{N}{letter}_{description}.png`
+## Output
+- All images saved to `/data/oih/outputs/paper_figures/`
+- Naming convention: `fig{N}{letter}_{description}.png`
 
 ## Tips
-- 加载后**先**移除 HOH 和 HETATM，再做选择
-- 渲染前**必须** `cmd.orient()` 调整视角
-- `sphere_scale` 0.4-0.6 适合热点可视化，太大会遮挡 cartoon
-- `cartoon_transparency` 0.5-0.7 适合幽灵叠加，太低看不清后面
-- 多链 PDB 先确认链编号（用 gemmi 或 PyMOL `cmd.get_chains()`）
-- CIF 文件直接 `cmd.load()` 即可，PyMOL 支持 mmCIF
-- 脚本最后**必须** `cmd.quit()` 否则进程不退出
+- **First** remove HOH and HETATM after loading, then make selections
+- **Must** call `cmd.orient()` before rendering to adjust the view
+- `sphere_scale` 0.4-0.6 is suitable for hotspot visualization; too large will obscure cartoon
+- `cartoon_transparency` 0.5-0.7 is suitable for ghost overlays; too low hides the background
+- For multi-chain PDBs, confirm chain IDs first (using gemmi or PyMOL `cmd.get_chains()`)
+- CIF files can be loaded directly with `cmd.load()`, PyMOL supports mmCIF
+- **Must** call `cmd.quit()` at the end of scripts, otherwise the process won't exit

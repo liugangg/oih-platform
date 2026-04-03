@@ -1,29 +1,29 @@
-# Chemprop工作流文档
+# Chemprop Workflow Documentation
 
-## 基本信息
-- 容器：oih-chemprop
-- Python：3.11（容器内 /usr/bin/python3.11，symlink /usr/bin/python3 → python3.11）
-- 版本：chemprop 2.2.2
-- **推理用CPU**（--accelerator cpu），GPU加速主要用于训练大数据集
-- 队列：CPU queue（task_manager 中 chemprop/chemprop_predict 归入 _CPU_TOOLS）
+## Basic Info
+- Container: oih-chemprop
+- Python: 3.11 (container: /usr/bin/python3.11, symlink /usr/bin/python3 → python3.11)
+- Version: chemprop 2.2.2
+- **Inference uses CPU** (--accelerator cpu), GPU acceleration mainly for training large datasets
+- Queue: CPU queue (chemprop/chemprop_predict assigned to _CPU_TOOLS in task_manager)
 
-## CLI命令
+## CLI Commands
 chemprop {train, predict, convert, fingerprint, hpopt}
 
-## 训练（GPU加速，大数据集推荐）
+## Training (GPU-accelerated, recommended for large datasets)
 ```bash
 docker exec oih-chemprop bash -c "
 chemprop train \
   -i /data/oih/inputs/train.csv \
   --smiles-columns smiles \
-  --target-columns <目标列名> \
+  --target-columns <target_column_name> \
   --accelerator gpu \
   --devices 1 \
   --epochs 50 \
   --save-dir /data/oih/outputs/<task>/"
 ```
 
-## 预测（CPU模式，避免GPU OOM）
+## Prediction (CPU mode, avoids GPU OOM)
 ```bash
 docker exec oih-chemprop bash -c "
 chemprop predict \
@@ -33,21 +33,21 @@ chemprop predict \
   -o /data/oih/outputs/<task>/predictions.csv"
 ```
 
-## 注意事项
-- 训练时 --devices 1 表示"使用1个GPU"（不是device index）
-- 预测时用 --accelerator cpu，小分子推理CPU足够（3分子<5秒）
-- 容器内 NVIDIA_VISIBLE_DEVICES=1，宿主机GPU1映射为容器内GPU0
-- 模型保存：<save-dir>/model_0/best.pt
-- 建议加 --num-workers 8 提升数据加载速度
-- 容器内测试模型：/opt/chemprop/tests/data/example_model_v2_regression_mol.pt
+## Important Notes
+- During training, --devices 1 means "use 1 GPU" (not device index)
+- For prediction, use --accelerator cpu; CPU is sufficient for small molecule inference (3 molecules <5s)
+- Container has NVIDIA_VISIBLE_DEVICES=1, host GPU1 mapped as GPU0 inside container
+- Model save location: <save-dir>/model_0/best.pt
+- Recommend adding --num-workers 8 to speed up data loading
+- Test model inside container: /opt/chemprop/tests/data/example_model_v2_regression_mol.pt
 
-## ADC ADMET 评估用法
+## ADC ADMET Evaluation Usage
 
-chemprop predict 可用于评估 ADC payload/linker-payload 偶联物的 ADMET 性质。
+chemprop predict can be used to evaluate ADMET properties of ADC payload/linker-payload conjugates.
 
-**上游**：rdkit_conjugate 输出的 `adc_smiles` 字段（dot-disconnected 或 covalent SMILES 均可）
+**Upstream**: `adc_smiles` field from rdkit_conjugate output (both dot-disconnected and covalent SMILES are accepted)
 
-**API调用**：
+**API Call**:
 ```bash
 curl -s --noproxy '*' -X POST http://localhost:8080/api/v1/ml/chemprop/predict \
   -H "Content-Type: application/json" \
@@ -59,30 +59,30 @@ curl -s --noproxy '*' -X POST http://localhost:8080/api/v1/ml/chemprop/predict \
   }'
 ```
 
-**输出**：每个分子的预测值（毒性/溶解性/渗透性等，取决于训练模型）
+**Output**: Predicted values per molecule (toxicity/solubility/permeability etc., depends on trained model)
 
-**典型 ADC 工作流**：
-1. `fetch_molecule` → 获取 payload SMILES (如 MMAE)
-2. `linker_select` → 选择 linker (如 MC-VC-PABC)
-3. `rdkit_conjugate` → 生成 linker-payload 偶联物 adc_smiles
-4. `chemprop_predict` → 用 adc_smiles 做 ADMET 预测
+**Typical ADC Workflow**:
+1. `fetch_molecule` → Get payload SMILES (e.g. MMAE)
+2. `linker_select` → Select linker (e.g. MC-VC-PABC)
+3. `rdkit_conjugate` → Generate linker-payload conjugate adc_smiles
+4. `chemprop_predict` → Run ADMET prediction on adc_smiles
 
-## 典型应用
-- 溶解度/logS预测
-- ADMET性质预测（吸收/分布/代谢/排泄/毒性）
-- 生物活性预测（IC50、Ki等）
-- 抗生素活性筛选（参考Cell 2020 Halicin）
-- ADC payload 毒性/选择性评估
+## Typical Applications
+- Solubility/logS prediction
+- ADMET property prediction (Absorption/Distribution/Metabolism/Excretion/Toxicity)
+- Bioactivity prediction (IC50, Ki, etc.)
+- Antibiotic activity screening (ref: Cell 2020 Halicin)
+- ADC payload toxicity/selectivity evaluation
 
 <!-- AUTO_SYNC_FROM_CLAUDE_MD -->
-## ⚠️ 注意事项（自动同步自 CLAUDE.md）
+## Notes (Auto-synced from CLAUDE.md)
 
-- 1. **Dockerfile 必须有**：`RUN ln -sf /usr/bin/python3.11 /usr/bin/python3`（容器内 python3 默认指向 3.10，但所有包装在 3.11 路径下）
-- 2. **predict 调用必须加**：`--accelerator cpu`（小批量走 GPU 会 OOM），归属 `_CPU_TOOLS` 队列
-- 3. **`--devices 1` = "使用 1 个 GPU 设备"**，不是 device index=1。train 用 `--accelerator gpu --devices 1`，predict 用 `--accelerator cpu`
-- **根因**：容器内 `python3` symlink 指向 3.10，但所有包（torch/numpy/chemprop）装在 python3.11 路径下 → `No module named 'numpy'`
-- **修复**：`docker exec oih-chemprop bash -c "rm /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3"`（容器重建会丢失，需写入 Dockerfile）
-- **router 修复**：`routers/ml_tools.py` 加 `--accelerator cpu`，避免 GPU OOM；`task_manager.py` 把 `chemprop_predict` 加入 `_CPU_TOOLS`
-- **验证**：3 分子预测 completed，CPU queue，5 秒完成
+- 1. **Dockerfile must include**: `RUN ln -sf /usr/bin/python3.11 /usr/bin/python3` (container's python3 defaults to 3.10, but all packages are installed under the 3.11 path)
+- 2. **predict calls must include**: `--accelerator cpu` (small batches on GPU will OOM), assigned to `_CPU_TOOLS` queue
+- 3. **`--devices 1` = "use 1 GPU device"**, not device index=1. Training: `--accelerator gpu --devices 1`, Prediction: `--accelerator cpu`
+- **Root cause**: Container's `python3` symlink points to 3.10, but all packages (torch/numpy/chemprop) are installed under python3.11 path → `No module named 'numpy'`
+- **Fix**: `docker exec oih-chemprop bash -c "rm /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3"` (lost on container rebuild, must be in Dockerfile)
+- **Router fix**: `routers/ml_tools.py` adds `--accelerator cpu` to avoid GPU OOM; `task_manager.py` adds `chemprop_predict` to `_CPU_TOOLS`
+- **Verified**: 3 molecule prediction completed, CPU queue, 5 seconds
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->
