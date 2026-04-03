@@ -1,8 +1,8 @@
-# 启动规则（每次会话开始必须执行）
-1. 找到并读取最新 session log：ls -t docs/*.md | head -1，然后 Read 全文
-2. 汇报：待完成事项、注意事项、上次遗留问题
-3. 检查服务状态：curl -s --noproxy '*' http://localhost:8080/health
-4. 确认后再接受任务
+# Startup Rules (execute at the beginning of every session)
+1. Find and read the latest session log: ls -t docs/*.md | head -1, then Read the entire file
+2. Report: pending items, caveats, issues from previous session
+3. Check service status: curl -s --noproxy '*' http://localhost:8080/health
+4. Confirm everything is ready before accepting tasks
 
 ---
 
@@ -116,27 +116,27 @@ Qwen reads file paths from tool outputs and passes them to subsequent tools itse
 | GROMACS | `oih-gromacs` | ✅ GPU command: `gmx mdrun -gpu_id 0 -nb gpu -pme gpu -update gpu -ntmpi 1 -ntomp 16` |
 | Chemprop | `oih-chemprop` | ✅ See Chemprop rules below |
 
-### Chemprop — 三个必须遵守的规则（血泪经验）
+### Chemprop — Three mandatory rules (hard-won lessons)
 
-1. **Dockerfile 必须有**：`RUN ln -sf /usr/bin/python3.11 /usr/bin/python3`（容器内 python3 默认指向 3.10，但所有包装在 3.11 路径下）
-2. **predict 调用必须加**：`--accelerator cpu`（小批量走 GPU 会 OOM），归属 `_CPU_TOOLS` 队列
-3. **`--devices 1` = "使用 1 个 GPU 设备"**，不是 device index=1。train 用 `--accelerator gpu --devices 1`，predict 用 `--accelerator cpu`
+1. **Dockerfile must include**: `RUN ln -sf /usr/bin/python3.11 /usr/bin/python3` (container python3 defaults to 3.10, but all packages are installed under the 3.11 path)
+2. **predict calls must include**: `--accelerator cpu` (small-batch GPU inference causes OOM), routed to `_CPU_TOOLS` queue
+3. **`--devices 1` = "use 1 GPU device"**, not device index=1. For train use `--accelerator gpu --devices 1`, for predict use `--accelerator cpu`
 
-**ADMET 模型路径**（MoleculeNet 标准数据集训练，30 epochs）：
+**ADMET model paths** (trained on MoleculeNet standard datasets, 30 epochs):
 ```
-/data/oih/models/admet/esol/model_0/best.pt          — 溶解度 logS（回归，MSE=0.54）
-/data/oih/models/admet/freesolv/model_0/best.pt      — 水化自由能（回归）
-/data/oih/models/admet/lipophilicity/model_0/best.pt  — 脂溶性 logD（回归，MSE=0.43）
-/data/oih/models/admet/bbbp/model_0/best.pt          — 血脑屏障（分类，AUC=0.89）
-/data/oih/models/admet/tox21/model_0/best.pt         — Tox21 NR-AhR 毒性（分类，AUC=0.90）
+/data/oih/models/admet/esol/model_0/best.pt          — Solubility logS (regression, MSE=0.54)
+/data/oih/models/admet/freesolv/model_0/best.pt      — Hydration free energy (regression)
+/data/oih/models/admet/lipophilicity/model_0/best.pt  — Lipophilicity logD (regression, MSE=0.43)
+/data/oih/models/admet/bbbp/model_0/best.pt          — Blood-brain barrier (classification, AUC=0.89)
+/data/oih/models/admet/tox21/model_0/best.pt         — Tox21 NR-AhR toxicity (classification, AUC=0.90)
 ```
 
-### GROMACS — 蛋白配体体系必须注意的坑
+### GROMACS — Critical pitfalls for protein-ligand systems
 
-1. **tc-grps 必须用 `Protein_LIG Water_and_ions`**（不是默认的 `Protein Non-Protein`），否则 NVT grompp 报 "group not found"
-2. **每步 mdrun 之后必须验证输出文件存在**：em.gro → nvt.gro → npt.gro → md.xtc，任何一步缺失立刻 raise 并附 .log 最后20行
-3. **`gmx make_ndx` 创建 Protein_LIG 组**：在 genion 之后、EM 之前运行 `echo '1 | 13\nq' | gmx make_ndx` 合并 Protein 和 LIG 组
-4. **不要静默忽略 mdrun 返回值**：`retcode != 0 and "WARNING" not in stderr` 这种判断不安全，WARNING 可能掩盖真实错误
+1. **tc-grps must use `Protein_LIG Water_and_ions`** (not the default `Protein Non-Protein`), otherwise NVT grompp reports "group not found"
+2. **Verify output files exist after each mdrun step**: em.gro -> nvt.gro -> npt.gro -> md.xtc; raise immediately on any missing file with the last 20 lines of the .log
+3. **`gmx make_ndx` to create Protein_LIG group**: run `echo '1 | 13\nq' | gmx make_ndx` after genion and before EM to merge Protein and LIG groups
+4. **Never silently ignore mdrun return values**: `retcode != 0 and "WARNING" not in stderr` is unsafe — WARNING messages can mask real errors
 
 ### Abandoned
 - ESMFold: incomplete openfold dependencies — do not attempt
@@ -208,7 +208,7 @@ Concurrency test: `tests/test_queue_concurrency.py --n 10` — verified peak=8 a
 - `skills_loader.py`: keyword matching → loads relevant `.md` files from `skills/` → injects into Qwen system prompt
 - 13 skill docs exist at `/data/oih/oih-api/skills/`
 - Verified working: detected skills + prompt injection confirmed (~3503 chars for AF3+AutoDock combo)
-- RFdiffusion keywords: `antibody/抗体/nanobody/纳米抗体/binder design/binder`
+- RFdiffusion keywords: `antibody/nanobody/binder design/binder`
 
 ---
 
@@ -291,94 +291,94 @@ Key implementation details:
 
 ---
 
-## 2026-03-15 修复记录
+## 2026-03-15 Fix Log
 
-### chemprop 容器修复
-- **根因**：容器内 `python3` symlink 指向 3.10，但所有包（torch/numpy/chemprop）装在 python3.11 路径下 → `No module named 'numpy'`
-- **修复**：`docker exec oih-chemprop bash -c "rm /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3"`（容器重建会丢失，需写入 Dockerfile）
-- **router 修复**：`routers/ml_tools.py` 加 `--accelerator cpu`，避免 GPU OOM；`task_manager.py` 把 `chemprop_predict` 加入 `_CPU_TOOLS`
-- **验证**：3 分子预测 completed，CPU queue，5 秒完成
+### Chemprop container fix
+- **Root cause**: Container `python3` symlink pointed to 3.10, but all packages (torch/numpy/chemprop) installed under the python3.11 path -> `No module named 'numpy'`
+- **Fix**: `docker exec oih-chemprop bash -c "rm /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3"` (lost on container rebuild, must be added to Dockerfile)
+- **Router fix**: `routers/ml_tools.py` added `--accelerator cpu` to avoid GPU OOM; `task_manager.py` added `chemprop_predict` to `_CPU_TOOLS`
+- **Validation**: 3-molecule prediction completed, CPU queue, finished in 5 seconds
 
-### ADC 工具链（新增 3 个工具）
-- **freesasa**：计算抗体 SASA，筛选 Lys/Cys 偶联位点（SASA>40Å²），走 CPU queue
-- **linker_select**：从 `data/linker_library.json`（20 条临床验证 linker）筛选，支持 cleavable/reaction_type/compatible_payload/clinical_status 四维过滤，默认按 approved > clinical > research 优先
-- **rdkit_conjugate**：7 类 ADC 偶联化学（maleimide_thiol/nhs_amine/hydrazone/oxime/disulfide/dbco_azide/transglutaminase），自动检测反应类型，多 SMARTS fallback chain + 通用降级
-- E2E 验证：Qwen 自主调用 fetch_pdb → freesasa → fetch_molecule → linker_select → rdkit_conjugate，推荐 MC-VC-PABC
+### ADC toolchain (3 new tools)
+- **freesasa**: Computes antibody SASA, filters Lys/Cys conjugation sites (SASA>40 Angstrom squared), routed to CPU queue
+- **linker_select**: Filters from `data/linker_library.json` (20 clinically validated linkers), supports 4-dimension filtering by cleavable/reaction_type/compatible_payload/clinical_status, defaults to approved > clinical > research priority
+- **rdkit_conjugate**: 7 ADC conjugation chemistries (maleimide_thiol/nhs_amine/hydrazone/oxime/disulfide/dbco_azide/transglutaminase), auto-detects reaction type, multi-SMARTS fallback chain + generic fallback
+- E2E validation: Qwen autonomously called fetch_pdb -> freesasa -> fetch_molecule -> linker_select -> rdkit_conjugate, recommended MC-VC-PABC
 
-### Qwen agent 错误重试修复
-- `qwen_agent.py`：记录每个工具连续失败次数，≥2 次自动跳过并通知 Qwen 继续后续流程
-- 避免之前 chemprop 失败 7 次导致超时的问题
+### Qwen agent error retry fix
+- `qwen_agent.py`: Tracks consecutive failure count per tool; >= 2 consecutive failures auto-skips and notifies Qwen to continue with subsequent steps
+- Prevents the previous issue where chemprop failed 7 times causing timeout
 
-### 服务管理明确
-- OIH 平台：`/data/oih/miniconda/bin/python`，`main:app`，端口 8080
-- Gemini 前端：`/opt/oih-agent/app.py`，`app:app`，端口 8001，不要动
-- 两个服务用不同 Python 环境，不要混淆
+### Service management clarification
+- OIH platform: `/data/oih/miniconda/bin/python`, `main:app`, port 8080
+- Gemini frontend: `/opt/oih-agent/app.py`, `app:app`, port 8001 — do not touch
+- The two services use different Python environments; do not confuse them
 
 ---
 
-## 2026-03-15 晚间完成（Claude Code session 2）
+## 2026-03-15 Evening (Claude Code session 2)
 
-### ADMET 模型训练（5 个标准 benchmark）
-- ESOL 溶解度（回归，MSE=0.54，1128mol）→ `/data/oih/models/admet/esol/model_0/best.pt`
-- FreeSolv 水化自由能（回归，642mol）→ `/data/oih/models/admet/freesolv/model_0/best.pt`
-- Lipophilicity logD（回归，MSE=0.43，4200mol）→ `/data/oih/models/admet/lipophilicity/model_0/best.pt`
-- BBBP 血脑屏障（分类，AUC=0.89，2039mol）→ `/data/oih/models/admet/bbbp/model_0/best.pt`
-- Tox21 NR-AhR 毒性（分类，AUC=0.90，6542mol）→ `/data/oih/models/admet/tox21/model_0/best.pt`
-- 路径已写入 `qwen_tools.py` 工具描述，Qwen 可直接选用
+### ADMET model training (5 standard benchmarks)
+- ESOL solubility (regression, MSE=0.54, 1128 mol) -> `/data/oih/models/admet/esol/model_0/best.pt`
+- FreeSolv hydration free energy (regression, 642 mol) -> `/data/oih/models/admet/freesolv/model_0/best.pt`
+- Lipophilicity logD (regression, MSE=0.43, 4200 mol) -> `/data/oih/models/admet/lipophilicity/model_0/best.pt`
+- BBBP blood-brain barrier (classification, AUC=0.89, 2039 mol) -> `/data/oih/models/admet/bbbp/model_0/best.pt`
+- Tox21 NR-AhR toxicity (classification, AUC=0.90, 6542 mol) -> `/data/oih/models/admet/tox21/model_0/best.pt`
+- Paths written into `qwen_tools.py` tool descriptions so Qwen can select them directly
 
-### binder_design_pipeline ✅ 完整 7-step 实现（含 ADC 构建）
-- Step 1-2: RFdiffusion → ProteinMPNN（原有）
-- Step 3: AF3 验证 — top5 MPNN → AF3 复合物 → ipTM 分级（≥0.75 high / ≥0.6 low_confidence）
-- Step 4: FreeSASA — nanobody 表面 Lys/Cys SASA>40Å² 过滤，取 top 3 偶联位点
-- Step 5: Linker Select — 根据位点类型选 maleimide(Cys) / NHS(Lys)，cleavable，compatible MMAE
-- Step 6: Fetch Payload — PubChem 获取 MMAE SMILES + MW
-- Step 7: RDKit Conjugate — antibody + linker + payload → ADC，DAR=4
-- 每步 try/except，单步失败标记 `partial: true` 不阻塞后续
-- `dry_run=true` 返回完整 mock 结构含 `adc_design` 字段
-- AF3 任务间隔 5 秒避免 GPU OOM，timeout 1800s
-- `BinderDesignPipelineRequest`：`num_designs`（alias）、`dry_run`、`hotspot_residues: list[str]`
+### binder_design_pipeline — full 7-step implementation (including ADC assembly)
+- Step 1-2: RFdiffusion -> ProteinMPNN (existing)
+- Step 3: AF3 validation — top 5 MPNN -> AF3 complex -> ipTM grading (>=0.75 high / >=0.6 low_confidence)
+- Step 4: FreeSASA — nanobody surface Lys/Cys SASA>40 Angstrom squared filtering, select top 3 conjugation sites
+- Step 5: Linker Select — choose maleimide(Cys) / NHS(Lys) based on site type, cleavable, compatible with MMAE
+- Step 6: Fetch Payload — retrieve MMAE SMILES + MW from PubChem
+- Step 7: RDKit Conjugate — antibody + linker + payload -> ADC, DAR=4
+- Each step has try/except; single-step failures marked `partial: true` without blocking subsequent steps
+- `dry_run=true` returns full mock structure with `adc_design` field
+- 5-second interval between AF3 tasks to avoid GPU OOM, timeout 1800s
+- `BinderDesignPipelineRequest`: `num_designs` (alias), `dry_run`, `hotspot_residues: list[str]`
 
-### GROMACS 蛋白配体 MD 修复（3 个关键 bug）
-1. **tc-grps 动态检测**：`make_ndx` 后解析 `index.ndx` 找实际合并组名（如 `Protein_UNL`），不再硬编码 `Protein_LIG`
-2. **MDP 延迟生成**：NVT/NPT/MD 的 MDP 在 `_run()` 内 `make_ndx` 之后才写入，确保 tc-grps 正确
-3. **每步文件检查**：em.gro → nvt.gro → npt.gro → md.xtc，缺失立即 raise + 附 .log 最后 20 行
-4. **废弃参数删除**：`dispdivcorr` → `DispCorr`，删除 `ns_type = grid`（GROMACS 2024 已废弃）
+### GROMACS protein-ligand MD fixes (3 critical bugs)
+1. **Dynamic tc-grps detection**: Parse `index.ndx` after `make_ndx` to find actual merged group names (e.g. `Protein_UNL`), no longer hardcoded `Protein_LIG`
+2. **Deferred MDP generation**: NVT/NPT/MD MDP files written inside `_run()` after `make_ndx`, ensuring correct tc-grps
+3. **Per-step file validation**: em.gro -> nvt.gro -> npt.gro -> md.xtc; raise immediately on missing file with last 20 lines of .log
+4. **Deprecated parameter removal**: `dispdivcorr` -> `DispCorr`, removed `ns_type = grid` (deprecated in GROMACS 2024)
 
-### RAG 知识库初始化
-- 6 轮 ADC 文献检索（HER2/CD30/TROP2/DAR/Linker），29 篇入库 ChromaDB
-- 本地 embedding 查询验证通过（BAAI/bge-m3 ONNX）
+### RAG knowledge base initialization
+- 6 rounds of ADC literature retrieval (HER2/CD30/TROP2/DAR/Linker), 29 papers indexed in ChromaDB
+- Local embedding query validation passed (BAAI/bge-m3 ONNX)
 
-### dashboard.html 前端（单文件 760 行）
-- 深色毛玻璃 UI，Space Grotesk + IBM Plex Mono，canvas 粒子背景
-- 顶栏：自然语言输入 → POST `/api/v1/agent/chat`，4 个 example prompt
-- 左栏：Agent Pipeline Timeline（2s polling，工具节点动画）
-- 右栏：9 种动态 Tab（Chat/Protein3D/Molecule2D/Docking/ADMET/Sites/Linker/Payload/ADC Assembly/MD）
-- Agent Chat：底部输入框 + markdown 渲染 + 600s 超时
-- 服务地址：`http://192.168.31.23:9099/dashboard.html`
+### dashboard.html frontend (single file, 760 lines)
+- Dark glassmorphism UI, Space Grotesk + IBM Plex Mono, canvas particle background
+- Top bar: natural language input -> POST `/api/v1/agent/chat`, 4 example prompts
+- Left panel: Agent Pipeline Timeline (2s polling, tool node animation)
+- Right panel: 9 dynamic tabs (Chat/Protein3D/Molecule2D/Docking/ADMET/Sites/Linker/Payload/ADC Assembly/MD)
+- Agent Chat: bottom input box + markdown rendering + 600s timeout
+- Service address: `http://192.168.31.23:9099/dashboard.html`
 
-### sync_claude_to_skills.py 文档同步脚本
-- 5 个同步目标：skills/*.md + routers/*.py + qwen_tools.py + skills_loader + CLAUDE.md（只读源）
-- 幂等可重复执行，用标记包裹（`AUTO_SYNC_FROM_CLAUDE_MD` / `SYNC_NOTES`）
-- Router 注释安全：换行符/引号清理，不破坏 Python 语法
-- 用法：`python scripts/sync_claude_to_skills.py --apply`
+### sync_claude_to_skills.py documentation sync script
+- 5 sync targets: skills/*.md + routers/*.py + qwen_tools.py + skills_loader + CLAUDE.md (read-only source)
+- Idempotent and repeatable; uses marker wrappers (`AUTO_SYNC_FROM_CLAUDE_MD` / `SYNC_NOTES`)
+- Router comment safety: newline/quote sanitization, does not break Python syntax
+- Usage: `python scripts/sync_claude_to_skills.py --apply`
 
-### ADC 工具链验证
-- freesasa / linker_select / rdkit_conjugate 三处注册完整（router + tool_definitions + TOOL_MAP）
+### ADC toolchain validation
+- freesasa / linker_select / rdkit_conjugate fully registered in all three locations (router + tool_definitions + TOOL_MAP)
 
 ---
 
 ## Current Outstanding Work
 
-1. **100 ns MD 进行中** — task_id `2add68d5`，EM 已通过，NVT/NPT/MD 进行中（tc-grps 修复后第三次提交）
-2. **MM/PBSA** — 100ns MD 完成后 post-process md.xtc 计算结合自由能
+1. **100 ns MD in progress** — task_id `2add68d5`, EM passed, NVT/NPT/MD in progress (third submission after tc-grps fix)
+2. **MM/PBSA** — post-process md.xtc after 100ns MD completes to compute binding free energy
 3. **AutoDock pipeline integration** — complete `pipeline.py` autodock preprocessing chain
-4. ~~**Frontend**~~ — ✅ dashboard.html 完成，Agent Chat 联通，实时任务追踪正常
-5. ~~**RAG**~~ — ✅ 已完成
-6. ~~**chemprop Dockerfile**~~ — ✅ Dockerfile 已有 `ln -sf`，容器 python3.11 正常
-7. ~~**ADMET 模型**~~ — ✅ 5 个标准 benchmark 模型训练完成
-8. ~~**RAG 知识库初始化**~~ — ✅ 29 篇 ADC 文献入库
-9. **端到端测试** — 用真实任务验证 dashboard 动态 Tab 解锁（蛋白结构/对接/ADMET/ADC）
-10. **chemprop 容器镜像重建** — Dockerfile 已修，等空闲时 `docker build` 固化到镜像
+4. ~~**Frontend**~~ — dashboard.html done, Agent Chat connected, real-time task tracking working
+5. ~~**RAG**~~ — completed
+6. ~~**chemprop Dockerfile**~~ — Dockerfile has `ln -sf`, container python3.11 working
+7. ~~**ADMET models**~~ — 5 standard benchmark models trained
+8. ~~**RAG knowledge base initialization**~~ — 29 ADC papers indexed
+9. **End-to-end testing** — validate dashboard dynamic tab unlocking with real tasks (protein structure/docking/ADMET/ADC)
+10. **Chemprop container image rebuild** — Dockerfile fixed, waiting for idle time to `docker build` to persist in image
 
 ---
 
@@ -411,352 +411,352 @@ tail -f /data/oih/oih-api/logs/agent.log
 
 ---
 
-## 环境关键事项（血泪经验，遇到问题先看这里）
+## Critical Environment Notes (hard-won lessons — check here first when troubleshooting)
 
-### 两个独立 FastAPI 服务（不要搞混！）
+### Two independent FastAPI services (do not confuse them!)
 
-| 服务 | 入口 | 端口 | Python | 管理方式 |
-|------|------|------|--------|----------|
-| OIH平台 | `/data/oih/oih-api/main.py` | 8080 | `/data/oih/miniconda/bin/python` | systemd `oih-api` |
-| Gemini前端 | `/opt/oih-agent/app.py` (`app:app`) | 8001 | `/opt/oih-agent/fastapi/bin/python3` | 手动 |
+| Service | Entry | Port | Python | Management |
+|---------|-------|------|--------|------------|
+| OIH Platform | `/data/oih/oih-api/main.py` | 8080 | `/data/oih/miniconda/bin/python` | systemd `oih-api` |
+| Gemini Frontend | `/opt/oih-agent/app.py` (`app:app`) | 8001 | `/opt/oih-agent/fastapi/bin/python3` | Manual |
 
-**OIH平台**（本项目）：
-- 重启（统一用这条，sudo 在非交互终端需要密码所以不用 systemctl）：
+**OIH Platform** (this project):
+- Restart (use this command; sudo requires password in non-interactive terminals, so avoid systemctl):
   ```bash
   NO_PROXY='*' no_proxy='*' nohup /data/oih/miniconda/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8080 --workers 1 > /tmp/fastapi.log 2>&1 &
   ```
-- 查日志：`tail -f /tmp/fastapi.log` 或 `journalctl -u oih-api -n 30 --no-pager`
-- pip安装：`/data/oih/miniconda/bin/pip install <包名>`
-- Python：`/data/oih/miniconda/bin/python`
-- 验证：`curl -s --noproxy '*' http://localhost:8080/health` → 返回 `{"status":"ok", "containers":{...}}`
-- 不要用 `/opt/oih-agent/fastapi/` 下的任何东西，那是 Gemini 前端的 venv
+- View logs: `tail -f /tmp/fastapi.log` or `journalctl -u oih-api -n 30 --no-pager`
+- pip install: `/data/oih/miniconda/bin/pip install <package>`
+- Python: `/data/oih/miniconda/bin/python`
+- Verify: `curl -s --noproxy '*' http://localhost:8080/health` -> returns `{"status":"ok", "containers":{...}}`
+- Do not use anything under `/opt/oih-agent/fastapi/` — that is the Gemini frontend's venv
 
-**Gemini前端**（不要动！）：
-- 进程：`/opt/oih-agent/fastapi/bin/uvicorn app:app --host 127.0.0.1 --port 8001`
-- 验证：`curl -s --noproxy '*' http://127.0.0.1:8001/health` → 返回 `{"ok":true, "model":"gemini-2.5-flash"}`
-- 不要 kill、不要重启、不要修改、不要往它的 venv 装包
+**Gemini Frontend** (do not touch!):
+- Process: `/opt/oih-agent/fastapi/bin/uvicorn app:app --host 127.0.0.1 --port 8001`
+- Verify: `curl -s --noproxy '*' http://127.0.0.1:8001/health` -> returns `{"ok":true, "model":"gemini-2.5-flash"}`
+- Do not kill, restart, modify, or install packages into its venv
 
-### 代理
-- Clash 端口 7890
-- localhost请求必须加 --noproxy '*' 否则502
-- curl内网：curl -s --noproxy '*' http://127.0.0.1:8001/...
+### Proxy
+- Clash port 7890
+- localhost requests must include --noproxy '*' or you get 502
+- curl to internal network: curl -s --noproxy '*' http://127.0.0.1:8001/...
 
-### GPU规则
-- 所有容器 NVIDIA_VISIBLE_DEVICES=1，容器内永远用 device=0
-- JAX容器（AF3、BindCraft）不要挂载宿主机 cuda lib64
+### GPU Rules
+- All containers use NVIDIA_VISIBLE_DEVICES=1; always use device=0 inside containers
+- JAX containers (AF3, BindCraft) must not mount host cuda lib64 paths
 
-### 三处注册规则（新工具必须同时改三处）
-1. routers/ 下对应文件加路由
-2. tool_definitions/qwen_tools.py 加tool定义
-3. qwen_agent.py 的 TOOL_MAP 加条目
+### Three-location registration rule (new tools must be changed in all three places)
+1. Add route in the corresponding file under routers/
+2. Add tool definition in tool_definitions/qwen_tools.py
+3. Add entry in TOOL_MAP in qwen_agent.py
 
-## Claude Code 安全提示处理
-以下命令模式会触发安全确认，直接选Yes：
-- `nohup ... > /tmp/fastapi.log 2>&1 &` → Yes（标准后台启动）
-- `sudo systemctl ...` → Yes
-- `/data/oih/miniconda/bin/pip install ...` → Yes（已设置不再询问）
-
----
-
-## oih-api.service 陷阱
-- systemd 有 oih-api.service（enabled），服务器重启会自动启动
-- 但平时用 nohup 手动启动，两者冲突会导致 kill 后被 systemd 拉起
-- 每次重启前先：`systemctl stop oih-api`
-- 正式部署时考虑把 nohup 命令写进 service 文件统一管理
+## Claude Code Safety Prompt Handling
+The following command patterns trigger security confirmations — select Yes:
+- `nohup ... > /tmp/fastapi.log 2>&1 &` -> Yes (standard background launch)
+- `sudo systemctl ...` -> Yes
+- `/data/oih/miniconda/bin/pip install ...` -> Yes (already configured to not ask)
 
 ---
 
-## 2026-03-16 完成项
-
-### 前端功能
-- dashboard.html 新增附件上传UI（794→959行）
-  - 📎 按钮弹出菜单（PDB上传/FASTA粘贴/SMILES粘贴）
-  - 附件标签预览（输入框上方，可删除）
-  - PTM检测结果卡片（✅/⚠️/📁 分类显示）
-  - 发送逻辑扩展：携带 pdb_content/fasta_sequence/smiles/filename
-- 终止任务按钮（running任务旁 ⏹）+ 终止对话按钮（🗑 清除会话）
-
-### 后端功能
-- AgentChatRequest 扩展4个Optional字段（pdb_content/fasta_sequence/smiles/filename）
-- detect_ptm() 函数：自动识别糖基化/磷酸化/二硫键/乙酰化
-- generate_tool_inputs() 函数：自动生成 af3_input.json / gromacs_ptm_notes.json / adc_input.json
-- is_simple_message() 动态 thinking_budget（问候类=0，复杂任务=1024+）
-- /api/v1/tasks/{task_id}/cancel 端点
-
-### 知识文件
-- skills/PTM_UPLOAD_PARADIGM.md：Qwen PTM决策范式
-- docs/paper/OIH_manuscript.md：bioRxiv论文草稿框架
-
-### 测试验证
-- 测试1 纯文本 hello：✅ 200，turns=2
-- 测试2 SMILES阿司匹林：✅ chemprop自动调用，Tox21=0.0154
-- 测试3 PDB+PTM：✅ af3_input.json(NAG糖基化)+gromacs_ptm_notes.json(二硫键)生成正确
-- is_simple_message：hi→budget=0 ✅，预测ADMET→budget=1024+ ✅
-
-### 系统状态
-- 100ns MD：22.74ns/100ns（22.7%），轨迹24GB，性能19.2ns/day，自然退出
-- 11容器全部running
-
-### 待完成
-- Case 2：纳米抗体设计实验（Fig 4数据）
-- Case 3：HER2-ADC设计实验（Fig 5数据）
-- Fig 6：各工具运行时间统计
-- MD动画渲染（MDAnalysis→gif）
-- 100ns MD重新提交（从22.74ns checkpoint续跑）
-- MM/PBSA结合自由能计算
+## oih-api.service Pitfall
+- systemd has oih-api.service (enabled), which auto-starts on server reboot
+- However, normally started manually via nohup — the conflict means systemd respawns the process after kill
+- Always run `systemctl stop oih-api` before restarting
+- For production deployment, consider writing the nohup command into the service file for unified management
 
 ---
 
-## 2026-03-17–18 完成项
+## 2026-03-16 Completed
 
-### binder_design_pipeline 完整 7-step + ADC
-- Step 1-3: RFdiffusion → ProteinMPNN → AF3 验证（ipTM ≥0.75 high / ≥0.6 low_confidence）
-- Step 4-7: FreeSASA 偶联位点 → Linker 选择 → MMAE payload → RDKit 偶联（DAR=4）
-- 每步 try/except，单步失败标记 partial，不阻塞后续
-- `pdb_id` 参数支持（自动 fetch_pdb）
-- `dry_run` 参数支持
-- `_parse_mpnn_fasta()` 修复 FASTA 解析
-- `hotspot_residues` 改为 `list[str]`
-- HER2 nanobody ADC v3 已提交（task: 6a34f32f）
+### Frontend
+- dashboard.html added attachment upload UI (794->959 lines)
+  - Paperclip button popup menu (PDB upload / FASTA paste / SMILES paste)
+  - Attachment tag preview (above input box, removable)
+  - PTM detection result card (categorized display)
+  - Send logic extended: includes pdb_content/fasta_sequence/smiles/filename
+- Cancel task button (next to running tasks) + clear conversation button
 
-### Task 持久化 ✅
-- `core/task_manager.py`：状态变更时写入 `data/tasks/{task_id}.json`
-- 启动时扫描目录恢复历史任务（running/pending 标记为 failed）
-- 字段：task_id, tool, status, progress, progress_msg, result, error, created_at, updated_at
+### Backend
+- AgentChatRequest extended with 4 Optional fields (pdb_content/fasta_sequence/smiles/filename)
+- detect_ptm() function: auto-detects glycosylation/phosphorylation/disulfide bonds/acetylation
+- generate_tool_inputs() function: auto-generates af3_input.json / gromacs_ptm_notes.json / adc_input.json
+- is_simple_message() dynamic thinking_budget (greetings=0, complex tasks=1024+)
+- /api/v1/tasks/{task_id}/cancel endpoint
 
-### Cancel 接口 ✅
-- `DELETE /api/v1/tasks/{task_id}`：取消 pending/running 任务
-- `core/task_manager.py` cancel_task 扩展为支持 running 状态
-- 已完成/已失败任务返回 400
+### Knowledge files
+- skills/PTM_UPLOAD_PARADIGM.md: Qwen PTM decision paradigm
+- docs/paper/OIH_manuscript.md: bioRxiv manuscript draft framework
 
-### Dashboard Results Hub ✅
-- 常驻 Results Hub tab，按工具分组展示所有历史任务
-- 左侧工具树 + 右侧工具类型特定渲染（12种）
-- 路径字段带复制按钮
-- Pipeline 结果内联 6 统计卡片 + AF3 表格 + ADC 摘要 + 下载按钮
+### Test validation
+- Test 1 plain text hello: 200, turns=2
+- Test 2 SMILES aspirin: chemprop auto-invoked, Tox21=0.0154
+- Test 3 PDB+PTM: af3_input.json (NAG glycosylation) + gromacs_ptm_notes.json (disulfide bonds) generated correctly
+- is_simple_message: hi -> budget=0, predict ADMET -> budget=1024+
 
-### Dashboard Pipeline Preview ✅
-- 输入时前端关键词匹配，显示流程预览（6种 pipeline）
-- 横向流程图：emoji + 工具名 + 预计时间
+### System status
+- 100ns MD: 22.74ns/100ns (22.7%), trajectory 24GB, performance 19.2ns/day, exited normally
+- All 11 containers running
 
-### Dashboard 子任务折叠 ✅
-- Pipeline 触发的子任务按 created_at 时间窗口归组
-- 左侧只显示 pipeline 卡片 + 子任务摘要（ProteinMPNN ×20 ✓18 ⏳2）
-
-### Dashboard Tab 高亮 ✅
-- running → cyan 脉冲动画，completed → 绿色 3 秒
-
-### Dashboard 3Dmol.js 修复 ✅
-- data 验证 + addModel try/catch + 友好错误提示
-
-### Qwen 同步 ✅
-- qwen_tools.py：binder_design_pipeline 描述更新（7步 + pdb_id + adc_design）
-- skills_loader.py：新增 ADC 关键词映射
-- ADC_WORKFLOW.md：完整 7 步流程 + 偶联化学规则 + DAR 说明
+### Remaining work
+- Case 2: Nanobody design experiment (Fig 4 data)
+- Case 3: HER2-ADC design experiment (Fig 5 data)
+- Fig 6: Tool runtime statistics
+- MD animation rendering (MDAnalysis -> gif)
+- 100ns MD resubmission (resume from 22.74ns checkpoint)
+- MM/PBSA binding free energy calculation
 
 ---
 
-## 2026-03-18 完成项
+## 2026-03-17-18 Completed
 
-### AF3 超时修复 — pipeline.py `_wait_for_af3_task()`
-- **根因**：v3 任务 5 个 AF3 设计全部失败。rank1 超时 1800s（但实际已跑完，ipTM=0.48），rank2-5 被路由到 DEGRADED 队列 OOM exit 1
-- **修复 1**：新增 `_wait_for_af3_task()` 无限等待函数，每 30s poll，仅在 OOM/exit1/cancelled/连续10次同错 时判定失败
-- **修复 2**：binder_pipeline + drug_discovery_pipeline 的 AF3 调用改用 `_wait_for_af3_task()`
-- **修复 3**：`_wait_for_task()` 支持 `timeout <= 0` 表示无限等待
+### binder_design_pipeline full 7-step + ADC
+- Step 1-3: RFdiffusion -> ProteinMPNN -> AF3 validation (ipTM >=0.75 high / >=0.6 low_confidence)
+- Step 4-7: FreeSASA conjugation sites -> Linker selection -> MMAE payload -> RDKit conjugation (DAR=4)
+- Each step has try/except; single-step failures marked partial without blocking subsequent steps
+- `pdb_id` parameter support (auto fetch_pdb)
+- `dry_run` parameter support
+- `_parse_mpnn_fasta()` FASTA parsing fix
+- `hotspot_residues` changed to `list[str]`
+- HER2 nanobody ADC v3 submitted (task: 6a34f32f)
 
-### AF3 不走 DEGRADED 队列 — task_manager.py `_NO_DEGRADED_TOOLS`
-- 新增 `_NO_DEGRADED_TOOLS = {"alphafold3", "bindcraft"}`
-- `_resolve_queue()` 中这些工具 VRAM 不足时每 60s 重试检查，等到 VRAM 足够再进 GPU 队列
-- 不再降级到 DEGRADED 导致 OOM crash
+### Task persistence
+- `core/task_manager.py`: writes to `data/tasks/{task_id}.json` on state changes
+- Scans directory on startup to recover historical tasks (running/pending marked as failed)
+- Fields: task_id, tool, status, progress, progress_msg, result, error, created_at, updated_at
 
-### 静态文件 /outputs 挂载 — main.py
+### Cancel endpoint
+- `DELETE /api/v1/tasks/{task_id}`: cancels pending/running tasks
+- `core/task_manager.py` cancel_task extended to support running status
+- Completed/failed tasks return 400
+
+### Dashboard Results Hub
+- Persistent Results Hub tab, displays all historical tasks grouped by tool
+- Left: tool tree + Right: tool-type-specific rendering (12 types)
+- Path fields with copy buttons
+- Pipeline results inline: 6 stat cards + AF3 table + ADC summary + download buttons
+
+### Dashboard Pipeline Preview
+- Frontend keyword matching on input, shows pipeline preview (6 pipeline types)
+- Horizontal flowchart: emoji + tool name + estimated time
+
+### Dashboard subtask collapsing
+- Pipeline-triggered subtasks grouped by created_at time window
+- Left panel shows only pipeline card + subtask summary (e.g. ProteinMPNN x20, 18 done, 2 pending)
+
+### Dashboard Tab highlighting
+- running -> cyan pulse animation, completed -> green for 3 seconds
+
+### Dashboard 3Dmol.js fix
+- Data validation + addModel try/catch + user-friendly error messages
+
+### Qwen sync
+- qwen_tools.py: binder_design_pipeline description updated (7 steps + pdb_id + adc_design)
+- skills_loader.py: added ADC keyword mappings
+- ADC_WORKFLOW.md: complete 7-step workflow + conjugation chemistry rules + DAR documentation
+
+---
+
+## 2026-03-18 Completed
+
+### AF3 timeout fix — pipeline.py `_wait_for_af3_task()`
+- **Root cause**: v3 task had all 5 AF3 designs fail. rank1 timed out at 1800s (but actually finished, ipTM=0.48); rank2-5 routed to DEGRADED queue, OOM exit 1
+- **Fix 1**: Added `_wait_for_af3_task()` infinite-wait function, polls every 30s, only declares failure on OOM/exit1/cancelled/10 consecutive identical errors
+- **Fix 2**: AF3 calls in binder_pipeline + drug_discovery_pipeline switched to `_wait_for_af3_task()`
+- **Fix 3**: `_wait_for_task()` supports `timeout <= 0` for infinite waiting
+
+### AF3 excluded from DEGRADED queue — task_manager.py `_NO_DEGRADED_TOOLS`
+- Added `_NO_DEGRADED_TOOLS = {"alphafold3", "bindcraft"}`
+- In `_resolve_queue()`, these tools retry every 60s when VRAM is insufficient, waiting until enough VRAM is available before entering GPU queue
+- No longer degrades to DEGRADED queue causing OOM crash
+
+### Static file /outputs mount — main.py
 - `app.mount("/outputs", StaticFiles(directory="/data/oih/outputs"), name="outputs")`
-- dashboard.html 3D 查看器和下载按钮路径改为 `/outputs/...`（之前 `/static/outputs/...` 404）
-- 验证：val_0 CIF 文件 HTTP 200
+- dashboard.html 3D viewer and download button paths changed to `/outputs/...` (previously `/static/outputs/...` returned 404)
+- Validation: val_0 CIF file HTTP 200
 
-### HER2 ADC v4 提交
+### HER2 ADC v4 submission
 - task_id: `b07f91e0-004f-4ec8-ad00-d7a84f826859`
-- 参数：1N8Z, hotspot S310/T311/Q313/L317, 10 designs
-- AF3 现在会无限等待完成，不会超时
+- Parameters: 1N8Z, hotspot S310/T311/Q313/L317, 10 designs
+- AF3 now waits indefinitely for completion, no timeout
 
-### 知识蒸馏系统 (2026-03-18)
-- `skills/SELF_DIAGNOSIS_WORKFLOW.md` — 自我诊断手册（AF3/VRAM/RFdiffusion/GROMACS）
-- `qwen_tools.py` system prompt — 新增自主诊断修复指令（4步闭环：诊断→修复→重跑→报告）
-- `data/distillation/` — 蒸馏训练数据目录
-- `scripts/collect_distillation_data.py` — 自动收集任务案例
-- 当前案例数：**67条**（4条手工 + 35条历史提取 + 28条自动收集）
-- 分类覆盖：gpu(6) / container(3) / tool(4) / pipeline(16) / proxy(2) / dashboard(1) / 自动(28) / 手工(4) / abandoned(2) / reference(1)
-- 下一步：积累到100条后做 LoRA 微调
+### Knowledge distillation system (2026-03-18)
+- `skills/SELF_DIAGNOSIS_WORKFLOW.md` — self-diagnosis handbook (AF3/VRAM/RFdiffusion/GROMACS)
+- `qwen_tools.py` system prompt — added autonomous diagnosis-repair instructions (4-step loop: diagnose -> fix -> rerun -> report)
+- `data/distillation/` — distillation training data directory
+- `scripts/collect_distillation_data.py` — auto-collects task cases
+- Current case count: **67** (4 manual + 35 historical extraction + 28 auto-collected)
+- Category coverage: gpu(6) / container(3) / tool(4) / pipeline(16) / proxy(2) / dashboard(1) / auto(28) / manual(4) / abandoned(2) / reference(1)
+- Next step: LoRA fine-tuning after accumulating 100 cases
 
 ---
 
-## 2026-03-20 完成项
+## 2026-03-20 Completed
 
-### pocket_guided_binder_pipeline 重构 — 多维口袋评分系统（14步）
+### pocket_guided_binder_pipeline refactor — multi-dimensional pocket scoring system (14 steps)
 
-**旧流程**（11步）：P2Rank top pocket → 直接取 top 6 残基 → DiffDock 盲对接交叉验证 → RFdiffusion
-**新流程**（14步）：多维评分 + Qwen 选择 → DiffDock 仅作成药性参考
+**Old pipeline** (11 steps): P2Rank top pocket -> directly select top 6 residues -> DiffDock blind docking cross-validation -> RFdiffusion
+**New pipeline** (14 steps): multi-dimensional scoring + Qwen selection -> DiffDock only as druggability reference
 
-**口袋评分公式**：
+**Pocket scoring formula**:
 ```
 composite = p2rank_prob × 0.2 + sasa_score × 0.2 + conservation × 0.2 + rag_score × 0.3 + electrostatics × 0.1
 ```
 
-| 维度 | 计算方法 | 权重 |
-|------|---------|------|
-| P2Rank | P2Rank ML probability（已归一化到 0-1） | 0.2 |
-| SASA | FreeSASA 对 target PDB 计算每个 pocket 残基的 mean_SASA / 150，cap 1.0 | 0.2 |
-| Conservation | B-factor 作为柔性代理：1 - mean_normalised_bfactor（低B=刚性=保守=好靶点） | 0.2 |
-| RAG | 文献残基重叠度：0(无) / 0.5(1-2残基) / 1.0(3+残基) | 0.3 |
-| Electrostatics | 口袋内带电残基(K/R/E/D/H)比例 | 0.1 |
+| Dimension | Calculation method | Weight |
+|-----------|-------------------|--------|
+| P2Rank | P2Rank ML probability (normalized to 0-1) | 0.2 |
+| SASA | FreeSASA on target PDB, mean_SASA / 150 per pocket residue, capped at 1.0 | 0.2 |
+| Conservation | B-factor as flexibility proxy: 1 - mean_normalised_bfactor (low B = rigid = conserved = good target) | 0.2 |
+| RAG | Literature residue overlap: 0 (none) / 0.5 (1-2 residues) / 1.0 (3+ residues) | 0.3 |
+| Electrostatics | Fraction of charged residues (K/R/E/D/H) in pocket | 0.1 |
 
-**14步详细流程**：
-1. fetch_pdb — 下载靶标
-2. RAG 文献检索 — `{target} {pdb_id} binding site epitope domain experimental validation`
-3. fpocket + P2Rank — 并行检测口袋（top 5）
-4. FreeSASA per pocket — 靶标 PDB 表面暴露度
-5. B-factor conservation + electrostatics — 保守性和静电分析
-6. 复合评分 + Qwen 结构生物学家口袋选择 — 返回 pocket_id + 6 个 hotspot + 选择理由
-7. DiffDock — 仅对选中口袋做成药性参考（标记 `small molecule druggability reference`）
-8. RFdiffusion — 用 Qwen 选择的 hotspot 做 binder backbone 设计
-9. ProteinMPNN — 序列设计
-10. AF3 验证 — ipTM ≥ 0.6
-11-14. ADC 构建 — FreeSASA 偶联位点 → Linker → MMAE → RDKit (DAR=4)
+**14-step detailed pipeline**:
+1. fetch_pdb — download target structure
+2. RAG literature search — `{target} {pdb_id} binding site epitope domain experimental validation`
+3. fpocket + P2Rank — parallel pocket detection (top 5)
+4. FreeSASA per pocket — target PDB surface exposure
+5. B-factor conservation + electrostatics — conservation and electrostatic analysis
+6. Composite scoring + Qwen structural biologist pocket selection — returns pocket_id + 6 hotspots + selection rationale
+7. DiffDock — druggability reference only for selected pocket (labeled `small molecule druggability reference`)
+8. RFdiffusion — binder backbone design using Qwen-selected hotspots
+9. ProteinMPNN — sequence design
+10. AF3 validation — ipTM >= 0.6
+11-14. ADC assembly — FreeSASA conjugation sites -> Linker -> MMAE -> RDKit (DAR=4)
 
-**新增 helper 函数**（`routers/pipeline.py`）：
-- `_parse_p2rank_residues()` — P2Rank 残基解析（提取自内联代码）
-- `_compute_bfactor_conservation()` — B-factor 保守性评分
-- `_compute_electrostatics_from_pdb()` — 带电残基比例
-- `_compute_sasa_score_for_pocket()` — 口袋 SASA 评分
-- `_compute_rag_score()` — 文献残基重叠评分
-- `_extract_residue_numbers_from_text()` — 正则提取文献中残基编号
-- `_rag_search_pocket_context()` — 直接调用 `HybridRetriever.retrieve()`（不走 HTTP）
-- `_compute_freesasa_per_residue()` — 直接调用 FreeSASA C 库（不走 task）
-- `_qwen_select_pocket()` — Qwen3-14B 口袋选择（返回 JSON）
+**New helper functions** (`routers/pipeline.py`):
+- `_parse_p2rank_residues()` — P2Rank residue parsing (extracted from inline code)
+- `_compute_bfactor_conservation()` — B-factor conservation scoring
+- `_compute_electrostatics_from_pdb()` — charged residue fraction
+- `_compute_sasa_score_for_pocket()` — pocket SASA scoring
+- `_compute_rag_score()` — literature residue overlap scoring
+- `_extract_residue_numbers_from_text()` — regex extraction of residue numbers from literature
+- `_rag_search_pocket_context()` — direct call to `HybridRetriever.retrieve()` (bypasses HTTP)
+- `_compute_freesasa_per_residue()` — direct call to FreeSASA C library (bypasses task)
+- `_qwen_select_pocket()` — Qwen3-14B pocket selection (returns JSON)
 
-**返回结果新增字段**：
-- `pocket_scores` — 每个口袋 5 维分数 + composite
+**New return fields**:
+- `pocket_scores` — 5-dimensional scores per pocket + composite
 - `selected_pocket` — `{id, center, hotspots, reason, composite_score}`
 - `diffdock_reference` — `{label, confidence, pose_path}`
 
-### AF3 PDB 解析修复 — 3 层 fallback
-- **原因**：CIF→PDB 转换失败时 `af3_pdb=None` → `"No PDB for FreeSASA"` 错误
-- **修复**：
-  1. `convert_af3_cif_to_pdb()`（gemmi + pdbfixer 完整原子补全）
-  2. Fallback: 纯 `gemmi.write_pdb()`（跳过 pdbfixer）
-  3. Fallback: 扫描 AF3 目录和 seed 子目录找现有 `.pdb` 文件
-  4. 已转换的 `_for_sasa.pdb` 文件跳过重复转换
+### AF3 PDB parsing fix — 3-layer fallback
+- **Cause**: CIF->PDB conversion failure left `af3_pdb=None` -> `"No PDB for FreeSASA"` error
+- **Fix**:
+  1. `convert_af3_cif_to_pdb()` (gemmi + pdbfixer full atom completion)
+  2. Fallback: plain `gemmi.write_pdb()` (skip pdbfixer)
+  3. Fallback: scan AF3 directory and seed subdirectories for existing `.pdb` files
+  4. Already-converted `_for_sasa.pdb` files skip redundant conversion
 
-### 口袋评分运行时 3 个 bug 修复（2026-03-21）
+### Pocket scoring runtime — 3 bug fixes (2026-03-21)
 
-**Bug 1 — RAG self-HTTP 死锁**：
-- `_rag_search_pocket_context()` 通过 `httpx.get("http://127.0.0.1:8080/api/v1/rag/search")` 调用本机 RAG 接口
-- `--workers 1` 的 uvicorn 唯一 worker 阻塞在 pipeline 协程上，无法处理 RAG 请求 → 死锁
-- **修复**：改为直接调用 `from retrieval.rag_router import get_retriever; retriever.retrieve(...)` 跳过 HTTP
+**Bug 1 — RAG self-HTTP deadlock**:
+- `_rag_search_pocket_context()` called local RAG endpoint via `httpx.get("http://127.0.0.1:8080/api/v1/rag/search")`
+- Single uvicorn worker (`--workers 1`) blocked on pipeline coroutine, unable to process RAG request -> deadlock
+- **Fix**: Changed to direct call `from retrieval.rag_router import get_retriever; retriever.retrieve(...)` bypassing HTTP
 
-**Bug 2 — Qwen3 thinking mode 返回空 content**：
-- Qwen3-14B 默认开启 thinking mode，`content` 字段为 `null`，思考过程在 `reasoning` 字段
-- `_qwen_select_pocket()` 取 `content` 后为 None → 后续 `re.sub()` 报 TypeError，被 except 吞掉
-- **修复**：请求体加 `"chat_template_kwargs": {"enable_thinking": False}` 禁用 thinking，直接返回 JSON
-- **防御**：增加 `content = msg.get("content") or ""` null 保护 + `exc_info=True` 完整 traceback 日志
+**Bug 2 — Qwen3 thinking mode returns null content**:
+- Qwen3-14B has thinking mode enabled by default; `content` field is `null`, reasoning is in the `reasoning` field
+- `_qwen_select_pocket()` got None for `content` -> subsequent `re.sub()` raised TypeError, silently caught by except
+- **Fix**: Added `"chat_template_kwargs": {"enable_thinking": False}` to request body to disable thinking, returning JSON directly
+- **Defense**: Added `content = msg.get("content") or ""` null guard + `exc_info=True` for full traceback logging
 
-**Bug 3 — RAG 残基编号匹配失败**：
-- RAG 从文献提取纯数字残基编号 `['42', '310']`
-- P2Rank 残基格式为 `['A42', 'A310']`（带链前缀）
-- 旧代码尝试给 RAG 残基加链前缀，但逻辑不可靠
-- **修复**：`_compute_rag_score()` 比较时双方都 `lstrip` 字母字符，统一为纯数字比较
+**Bug 3 — RAG residue number matching failure**:
+- RAG extracts pure numeric residue numbers from literature `['42', '310']`
+- P2Rank residue format includes chain prefix `['A42', 'A310']`
+- Old code attempted to add chain prefix to RAG residues, but the logic was unreliable
+- **Fix**: `_compute_rag_score()` strips leading alphabetic characters from both sides during comparison, unifying to pure numeric comparison
 
-### RAG ChromaDB 知识库配置与扩充
+### RAG ChromaDB knowledge base configuration and expansion
 
-**ChromaDB 路径**：`/data/oih/knowledge/chroma`（collection: `oih_knowledge`）
-- 配置位置：`/data/oih/retrieval/config.py` → `cfg.chroma_path`
-- 环境变量：`OIH_CHROMA_PATH`（默认已指向正确路径）
-- `/data/oih/retrieval/chroma_db` 是空库，不使用
+**ChromaDB path**: `/data/oih/knowledge/chroma` (collection: `oih_knowledge`)
+- Config location: `/data/oih/retrieval/config.py` -> `cfg.chroma_path`
+- Environment variable: `OIH_CHROMA_PATH` (already points to the correct path by default)
+- `/data/oih/retrieval/chroma_db` is an empty database, not in use
 - Embedding: BAAI/bge-m3 (ONNX)
 
-**文档数量**：80 篇（50 原有 ADC 文献 + 26 PubMed HER2 结构论文 + 4 curated 残基数据）
+**Document count**: 80 (50 existing ADC papers + 26 PubMed HER2 structural papers + 4 curated residue entries)
 
-**HER2 残基级别数据**（4 条 curated entries）：
-- `curated_her2_pertuzumab_residues` — Domain II 二聚化臂：S267, L269, T271, K273, E280, G282 (PDB 1S78)
-- `curated_her2_trastuzumab_residues` — Domain IV：K505, F506, P557, E558, D560, E561 (PDB 1N8Z)
-- `curated_her2_domain_hotspots` — 4 个治疗口袋汇总 + Kd 值
-- `curated_her2_2a91_pocket1` — P2Rank pocket 1 残基 ↔ Domain I/III 界面映射
+**HER2 residue-level data** (4 curated entries):
+- `curated_her2_pertuzumab_residues` — Domain II dimerization arm: S267, L269, T271, K273, E280, G282 (PDB 1S78)
+- `curated_her2_trastuzumab_residues` — Domain IV: K505, F506, P557, E558, D560, E561 (PDB 1N8Z)
+- `curated_her2_domain_hotspots` — 4 therapeutic pocket summary + Kd values
+- `curated_her2_2a91_pocket1` — P2Rank pocket 1 residues mapped to Domain I/III interface
 
-**重要**：PubMed 摘要通常不含残基编号，需要从全文提取或手动 curate。`rag_score > 0` 需要知识库中有残基级数据。对新靶标需按此模式补充 curated entries。
+**Important**: PubMed abstracts typically do not contain residue numbers; they need to be extracted from full text or manually curated. `rag_score > 0` requires residue-level data in the knowledge base. For new targets, curated entries must be added following this pattern.
 
-**入库方法**：
-- PubMed 批量：`POST /api/v1/rag/local/add-papers` + PMID 列表
-- 手动 curated：`chromadb.PersistentClient(path).get_collection('oih_knowledge').upsert()`
-- PDF 上传：`POST /api/v1/rag/local/upload-pdf`（需 `OIH_PDF_INGEST=true`）
+**Ingestion methods**:
+- PubMed batch: `POST /api/v1/rag/local/add-papers` + PMID list
+- Manual curated: `chromadb.PersistentClient(path).get_collection('oih_knowledge').upsert()`
+- PDF upload: `POST /api/v1/rag/local/upload-pdf` (requires `OIH_PDF_INGEST=true`)
 
-### BindCraft 并行路径（2026-03-21）
-- `pocket_guided_binder_pipeline` 从 14 步扩展到 **15 步**
-- Step 8 拆分为 8a (RFdiffusion) + 8b (BindCraft)，用 `asyncio` 并行执行
-- BindCraft 失败不阻塞 pipeline（`try/except`，标记 `status: failed`）
-- BindCraft 结果提取序列（`_extract_sequence_from_pdb`），最多 2 条合并到 AF3 候选列表
-- AF3 验证从合并后的候选（MPNN + BindCraft）中取 top 5
-- BindCraft 参数：`num_designs=10`（不能<10, pydantic ge=10），使用 `default_4stage_multimer.json`
+### BindCraft parallel path (2026-03-21)
+- `pocket_guided_binder_pipeline` expanded from 14 steps to **15 steps**
+- Step 8 split into 8a (RFdiffusion) + 8b (BindCraft), executed in parallel with `asyncio`
+- BindCraft failure does not block pipeline (`try/except`, marked `status: failed`)
+- BindCraft results: sequences extracted (`_extract_sequence_from_pdb`), up to 2 merged into AF3 candidate list
+- AF3 validation selects top 5 from merged candidates (MPNN + BindCraft)
+- BindCraft parameters: `num_designs=10` (cannot be <10, pydantic ge=10), uses `default_4stage_multimer.json`
 
 ---
 
-## 2026-03-21 完成项
+## 2026-03-21 Completed
 
-### DiscoTope3 集成（第14个容器 oih-discotope3）
-- 3处注册完成，B细胞表位预测
-- 验证：1N8Z HER2 → 195表位/1015残基
-- DT3 raw score 范围 0.001-0.5（不同结构不同），**不要用固定阈值0.7**
-- `calibrated_score_epi_threshold` 默认 0.5
+### DiscoTope3 integration (14th container oih-discotope3)
+- Registered in all 3 locations, B-cell epitope prediction
+- Validation: 1N8Z HER2 -> 195 epitopes / 1015 residues
+- DT3 raw score range 0.001-0.5 (varies by structure), **do not use fixed threshold 0.7**
+- `calibrated_score_epi_threshold` default 0.5
 
-### IgFold 集成（第15个容器 oih-igfold）
-- 抗体/纳米抗体序列→3D结构快速预测（~2s/seq GPU）
-- 基于 proteinmpnn:latest，igfold 0.4.0 + antiberty
-- 输出 pRMSD（不是pLDDT），转换：`pseudo_plddt = 100 - prmsd * 20`
-- `do_renum=False`（anarcii≠anarci 包名冲突）
+### IgFold integration (15th container oih-igfold)
+- Antibody/nanobody sequence -> fast 3D structure prediction (~2s/seq GPU)
+- Based on proteinmpnn:latest, igfold 0.4.0 + antiberty
+- Outputs pRMSD (not pLDDT), conversion: `pseudo_plddt = 100 - prmsd * 20`
+- `do_renum=False` (anarcii vs anarci package name conflict)
 
-### ESM2 新工具
-- `esm2_score_sequences`：伪困惑度评分（PPL<15=合格序列）
-- `esm2_mutant_scan`：ESM-1v 点突变扫描（ΔΔG proxy）
-- ESM-1v 模型 7.3GB，首次加载需下载
+### ESM2 new tools
+- `esm2_score_sequences`: pseudo-perplexity scoring (PPL<15 = passing sequence)
+- `esm2_mutant_scan`: ESM-1v single-point mutation scan (delta-delta-G proxy)
+- ESM-1v model 7.3GB, requires download on first load
 
-### IEDB + SAbDab 接入 RAG
+### IEDB + SAbDab integrated into RAG
 - IEDB: `https://query-api.iedb.org/bcell_search` PostgREST API
-- SAbDab: TSV全量下载 + antigen名过滤（8MB, 20K行）
-- `extract_antigen_name()` 正则提取靶标名
-- RAG gather 总超时 30s，PubMed efetch 10s+15s 超时保护
+- SAbDab: full TSV download + antigen name filtering (8MB, 20K rows)
+- `extract_antigen_name()` regex extraction of target name
+- RAG gather total timeout 30s, PubMed efetch 10s+15s timeout protection
 
-### pocket_guided_binder_pipeline 升级 16 步 6D 评分
-- 评分公式：`p2rank(0.15) + sasa(0.15) + conservation(0.15) + rag(0.25) + electrostatics(0.10) + epitope(0.20)`
-- DiscoTope3 与 fpocket/P2Rank 并行（step 3）
-- `_compute_epitope_score_for_pocket()`：口袋残基8Å内DT3表位比例
-- ESM2 PPL filter → IgFold pLDDT filter → AF3（漏斗）
+### pocket_guided_binder_pipeline upgraded to 16-step 6D scoring
+- Scoring formula: `p2rank(0.15) + sasa(0.15) + conservation(0.15) + rag(0.25) + electrostatics(0.10) + epitope(0.20)`
+- DiscoTope3 runs in parallel with fpocket/P2Rank (step 3)
+- `_compute_epitope_score_for_pocket()`: DT3 epitope fraction within 8 Angstrom of pocket residues
+- ESM2 PPL filter -> IgFold pLDDT filter -> AF3 (funnel)
 
-### known_epitope_override（血泪经验）
-- 触发条件：DT3 高分残基 ∩ RAG 文献残基 ≥ 2
-- DT3 阈值：**adaptive = max(top 20% score, 0.10)**，不要用固定 0.7
-- 编号对齐：PDB 与 UniProt 编号可能有偏移，**自动检测 offset(0, ±22, ±23)**
-- 模糊匹配：`abs(dt3_num + offset - rag_num) <= 3`
-- **空间聚集**：`_cluster_hotspots()` centroid 距离 ≤ 15Å，**最多 5 个 hotspot**
-- 不聚集的后果：8个分散hotspot→RFdiffusion 每设计 30+ 分钟→超时
+### known_epitope_override (hard-won lesson)
+- Trigger condition: DT3 high-scoring residues intersection with RAG literature residues >= 2
+- DT3 threshold: **adaptive = max(top 20% score, 0.10)**, do not use fixed 0.7
+- Numbering alignment: PDB and UniProt numbering may have offset, **auto-detect offset (0, +/-22, +/-23)**
+- Fuzzy matching: `abs(dt3_num + offset - rag_num) <= 3`
+- **Spatial clustering**: `_cluster_hotspots()` centroid distance <= 15 Angstrom, **max 5 hotspots**
+- Consequence of not clustering: 8 scattered hotspots -> RFdiffusion 30+ min per design -> timeout
 
-### RFdiffusion 大靶标注意事项
-- HER2 ECD 506 残基 → 每设计 20-40 分钟（正常 ~2 分钟）
-- **timeout 必须 7200s**（不是 3600s）
-- **num_designs 用 10**（不要 20，太慢）
-- **hotspot 必须空间聚集**（<= 15Å centroid），分散的会极慢
-- 超时后恢复已生成 PDB（`_wait_for_task` try/except + scan output dir）
+### RFdiffusion large target considerations
+- HER2 ECD 506 residues -> 20-40 min per design (normal ~2 min)
+- **timeout must be 7200s** (not 3600s)
+- **num_designs use 10** (not 20, too slow)
+- **hotspots must be spatially clustered** (<= 15 Angstrom centroid), scattered ones are extremely slow
+- Recover already-generated PDBs after timeout (`_wait_for_task` try/except + scan output dir)
 
-### 模型缓存 Volume Mount
-| 容器 | 宿主机路径 | 容器路径 |
-|------|-----------|---------|
+### Model cache volume mounts
+| Container | Host path | Container path |
+|-----------|-----------|----------------|
 | oih-esm | /data/oih/model_cache/esm_torch_hub | /root/.cache/torch/hub |
 | oih-discotope3 | /data/oih/model_cache/torch/hub | /root/.cache/torch/hub |
 | oih-discotope3 | /data/oih/model_cache/discotope3_models | /app/discotope3/models |
 | oih-igfold | /data/oih/model_cache/igfold | /root/.cache |
 
-### 当前工具总数：30 个，容器数：15 个
-- 新增 5 工具：discotope3_predict, igfold_predict, esm2_score_sequences, esm2_mutant_scan, extract_interface_residues
-- 新增 2 容器：oih-discotope3, oih-igfold
-- RAG 5 源：PubMed + bioRxiv + IEDB + SAbDab + LocalDB
+### Current tool count: 30, container count: 15
+- 5 new tools: discotope3_predict, igfold_predict, esm2_score_sequences, esm2_mutant_scan, extract_interface_residues
+- 2 new containers: oih-discotope3, oih-igfold
+- RAG 5 sources: PubMed + bioRxiv + IEDB + SAbDab + LocalDB
 
 ---
 
@@ -791,40 +791,40 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 - Tier 3 hotspots come from **computational prediction** (often scattered, low pLDDT)
 - HER2 = Tier 1 → fetch 1N8Z → extract C-chain interface → clustered hotspots → better RFdiffusion
 
-### 热点自动聚类规则（所有靶点通用）
-- 所有靶点在提交 RFdiffusion 前，自动对热点做空间聚类（`_multi_cluster_hotspots`）
-- 距离阈值：15Å（CA-CA 距离），≤15Å 归同组
-- 每组最多 5 个残基
-- 多个聚类 → 分别提交 RFdiffusion → 结果合并 → 统一 MPNN → ESM2 → AF3
-- BindCraft 只在第一个（最大）聚类上运行
-- 单聚类（≤3 个热点或全部在 15Å 内）→ 不分组
-- 适用：CD36/EGFR/CD20/HER2 multi-domain/任何大型蛋白
-- CD36 教训：5 个分散热点（A164-A400 跨 236 残基）→ ipTM=0.43 全部失败
+### Automatic Hotspot Clustering Rules (universal for all targets)
+- All targets undergo automatic spatial clustering of hotspots (`_multi_cluster_hotspots`) before submitting to RFdiffusion
+- Distance threshold: 15 Angstrom (CA-CA distance); residues within 15 Angstrom are grouped together
+- Maximum 5 residues per cluster
+- Multiple clusters → submit to RFdiffusion separately → merge results → unified MPNN → ESM2 → AF3
+- BindCraft runs only on the first (largest) cluster
+- Single cluster (3 or fewer hotspots, or all within 15 Angstrom) → no splitting
+- Applicable to: CD36/EGFR/CD20/HER2 multi-domain/any large protein
+- CD36 lesson: 5 scattered hotspots (A164-A400 spanning 236 residues) → ipTM=0.43, all failed
 
 ### pLDDT Quality Expectations by Tier
 - Tier 1 hotspots → RFdiffusion backbone quality: pLDDT > 70 expected
 - Tier 3 hotspots → RFdiffusion backbone quality: pLDDT 40-70, need more designs
 
 ### AF3 Antigen Domain Registry (`DOMAIN_REGISTRY` in pipeline.py)
-- AF3 验证时按结构域截取抗原序列，避免全长序列降低ipTM精度
-- 已知蛋白按 UniProt/Pfam 域边界截取，padding=30aa
-- 新增靶标时需同时更新 `DOMAIN_REGISTRY` 和 `KNOWN_COMPLEXES`
-- 多个可成药域 → 分别跑AF3，取最高ipTM
-- `num_seeds=3` 用于 binder_design_pipeline AF3 验证（速度/准确性平衡）
+- During AF3 validation, the antigen sequence is truncated by structural domain to avoid full-length sequences reducing ipTM accuracy
+- Known proteins are truncated at UniProt/Pfam domain boundaries with padding=30aa
+- When adding new targets, both `DOMAIN_REGISTRY` and `KNOWN_COMPLEXES` must be updated simultaneously
+- Multiple druggable domains → run AF3 separately for each, select the highest ipTM
+- `num_seeds=3` is used for binder_design_pipeline AF3 validation (speed/accuracy trade-off)
 
-### GPU VRAM 限制（RTX 4090, 44GB）
-- GPU Semaphore = 1（同一时间只跑 1 个 GPU 任务，防止 OOM）
-- AF3: ~20GB（必须独占）
+### GPU VRAM Limits (RTX 4090, 44GB)
+- GPU Semaphore = 1 (only one GPU task at a time to prevent OOM)
+- AF3: ~20GB (requires exclusive access)
 - RFdiffusion: ~8GB
 - BindCraft: ~16GB
 - DiffDock: ~8GB
-- DiscoTope3: ~6GB（ESM-IF1 1.6GB + XGBoost）
-- 两个大模型并发 = 必然 OOM
+- DiscoTope3: ~6GB (ESM-IF1 1.6GB + XGBoost)
+- Two large models running concurrently = guaranteed OOM
 
-### 5LGD (CD36) 注意事项
-- PDB 包含 chain A (CD36) + chain B (PfEMP1 malaria protein)
-- pipeline 必须指定 `chains="A"` 过滤，否则 DiscoTope3 报 "No valid PDB"
-- CD36 残基范围: 35-434 (400 residues)
+### 5LGD (CD36) Important Notes
+- PDB contains chain A (CD36) + chain B (PfEMP1 malaria protein)
+- Pipeline must specify `chains="A"` to filter; otherwise DiscoTope3 reports "No valid PDB"
+- CD36 residue range: 35-434 (400 residues)
 
 ### PeSTo PPI Interface Prediction (deployed 2026-03-23)
 - Replaces P2Rank + DiscoTope3 in binder design scoring
@@ -851,13 +851,13 @@ Always classify target tier BEFORE hotspot selection in `pocket_guided_binder_pi
 - Distillation: 81 cases (target 100 for LoRA)
 
 ## 2026-03-24 CRITICAL BUG FIX: MPNN chains_to_design
-RFdiffusion binder_design输出：chain A=binder(短), chain B=target(长)。
-MPNN之前硬编码designed_chains=['A']，对HER2(原始chainC)恰好正确，对其他靶点(原始chainA)全部设计了target。
-修复：pipeline.py动态检测最短链作为binder_chain。
-HER2(ipTM=0.86)数据有效。其他5个靶点需要用fixed代码重跑。
+RFdiffusion binder_design output: chain A = binder (shorter), chain B = target (longer).
+MPNN previously hardcoded designed_chains=['A'], which happened to be correct for HER2 (original chain C) but incorrectly designed the target chain for all other targets (original chain A).
+Fix: pipeline.py now dynamically detects the shortest chain as binder_chain.
+HER2 (ipTM=0.86) data remains valid. The other 5 targets need to be re-run with the fixed code.
 
-## CRITICAL: KNOWN_COMPLEXES 链分配必须从PDB文件验证
-**永远不要猜 ligand_chains。** 添加新靶点到 KNOWN_COMPLEXES 前必须执行：
+## CRITICAL: KNOWN_COMPLEXES chain assignments must be verified from the PDB file
+**Never guess ligand_chains.** Before adding a new target to KNOWN_COMPLEXES, always run:
 ```python
 import gemmi
 st = gemmi.read_structure('path/to/PDB.pdb')
@@ -865,10 +865,10 @@ for c in st[0]:
     nres = sum(1 for r in c if r.entity_type == gemmi.EntityType.Polymer)
     print(f'Chain {c.name}: {nres}aa')
 ```
-然后人工判断：哪条链是 target（通常最长），哪些链是 ligand（抗体 Fab = 两条 Heavy+Light 链）。
+Then manually determine: which chain is the target (usually the longest), and which chains are the ligand (antibody Fab = two Heavy+Light chains).
 
-**已验证的 KNOWN_COMPLEXES：**
-| PDB | Target | receptor_chain | ligand_chains | 验证日期 |
+**Verified KNOWN_COMPLEXES:**
+| PDB | Target | receptor_chain | ligand_chains | Verified |
 |-----|--------|---------------|---------------|----------|
 | 1N8Z | HER2 | C(581aa) | [A(214),B(220)] | 2026-03-25 |
 | 5XXY | PD-L1 | A(99aa) | [H(208),L(211)] | 2026-03-25 |
@@ -876,9 +876,9 @@ for c in st[0]:
 | 1BJ1 | VEGF | V(94aa) | [H(218),L(213)] | 2026-03-25 |
 | 3WD5 | TNF | A(152aa) | [H(214),L(213)] | 2026-03-25 |
 
-**教训：** 1YY9 EGFR 最初写了 ligand_chains=["B"]（猜的），实际 cetuximab 是 C+D 链。导致 extract_interface 提取了错误界面，浪费了整个 v2 pipeline。
+**Lesson learned:** 1YY9 EGFR was initially written with ligand_chains=["B"] (guessed), but cetuximab actually uses chains C+D. This caused extract_interface to extract the wrong interface, wasting the entire v2 pipeline run.
 
-## CRITICAL: ADC偶联位点必须在binder链上
-FreeSASA分析AF3复合物时，必须只看binder链的Lys/Cys，不能选antigen链。
-ADC结构: binder-linker-payload，payload挂在binder上。
-antigen链上的Lys（如HER2 B:K603）绝对不能作为偶联位点。
+## CRITICAL: ADC conjugation sites must be on the binder chain
+When FreeSASA analyzes AF3 complexes, it must only examine Lys/Cys on the binder chain; the antigen chain must not be selected.
+ADC architecture: binder-linker-payload, where the payload is attached to the binder.
+Lys residues on the antigen chain (e.g. HER2 B:K603) must never be used as conjugation sites.

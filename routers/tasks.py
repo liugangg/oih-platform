@@ -1,6 +1,6 @@
 """
 Task Management Router
-轮询任务状态、查看结果、取消任务
+Poll task status, view results, cancel tasks
 """
 from fastapi import APIRouter, HTTPException
 from typing import Optional

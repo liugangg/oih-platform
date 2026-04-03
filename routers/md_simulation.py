@@ -3,15 +3,15 @@ MD Simulation Router
 Tools: GROMACS (GPU-accelerated)
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# GROMACS 注意事项（来自 CLAUDE.md，勿手动编辑）：
-#   - 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
-#   - 1. **tc-grps 必须用 `Protein_LIG Water_and_ions`**（不是默认的 `Protein Non-Protein`），否则 NVT grompp 报...
-#   - 2. **每步 mdrun 之后必须验证输出文件存在**：em.gro → nvt.gro → npt.gro → md.xtc，任何一步缺失立刻 raise 并附 .log 最后20行
-#   - 3. **`gmx make_ndx` 创建 Protein_LIG 组**：在 genion 之后、EM 之前运行 `echo '1 | 13 q' | gmx make_ndx` ...
-#   - 4. **不要静默忽略 mdrun 返回值**：`retcode != 0 and "WARNING" not in stderr` 这种判断不安全，WARNING 可能掩盖真实错误
-#   - 1. **tc-grps 动态检测**：`make_ndx` 后解析 `index.ndx` 找实际合并组名（如 `Protein_UNL`），不再硬编码 `Protein_LIG`
-#   - 2. **MDP 延迟生成**：NVT/NPT/MD 的 MDP 在 `_run()` 内 `make_ndx` 之后才写入，确保 tc-grps 正确
-#   - 3. **每步文件检查**：em.gro → nvt.gro → npt.gro → md.xtc，缺失立即 raise + 附 .log 最后 20 行
+# GROMACS notes (from CLAUDE.md, do not manually edit):
+#   - Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 / gpu_id=0 (not 1)
+#   - 1. **tc-grps must use `Protein_LIG Water_and_ions`** (not default `Protein Non-Protein`), otherwise NVT grompp fails
+#   - 2. **Verify output files after each mdrun step**: em.gro → nvt.gro → npt.gro → md.xtc; raise immediately if any is missing, attach last 20 lines of .log
+#   - 3. **`gmx make_ndx` creates Protein_LIG group**: run `echo '1 | 13 q' | gmx make_ndx` after genion, before EM
+#   - 4. **Never silently ignore mdrun return code**: `retcode != 0 and "WARNING" not in stderr` is unsafe; WARNING may mask real errors
+#   - 1. **Dynamic tc-grps detection**: parse `index.ndx` after `make_ndx` to find actual merged group name (e.g. `Protein_UNL`), no longer hardcoded `Protein_LIG`
+#   - 2. **Deferred MDP generation**: NVT/NPT/MD MDP files written inside `_run()` after `make_ndx`, ensuring correct tc-grps
+#   - 3. **Per-step file check**: em.gro → nvt.gro → npt.gro → md.xtc; raise immediately if missing + attach last 20 lines of .log
 # --- /SYNC_NOTES ---
 
 import logging
@@ -176,7 +176,7 @@ async def run_gromacs(req: GROMACSRequest):
         workdir = f"/data/oih/outputs/{req.job_name}/gromacs"
         pdb_in = req.input_pdb if os.path.exists(req.input_pdb) else f"/data/oih/inputs/{os.path.basename(req.input_pdb)}"
         mdp_base = f"/data/oih/inputs/{req.job_name}/mdp"
-        gpu_flag = "--gpu_id 0"  # 容器内NVIDIA_VISIBLE_DEVICES=1已映射为GPU0
+        gpu_flag = "--gpu_id 0"  # Container NVIDIA_VISIBLE_DEVICES=1 is mapped to GPU0
 
         # ── pdbfixer: complete missing sidechain heavy atoms before pdb2gmx ──
         try:
@@ -195,7 +195,7 @@ async def run_gromacs(req: GROMACSRequest):
         except Exception as e:
             logger.warning(f"[gromacs] pdbfixer failed ({e}), using raw PDB with -missing flag")
 
-        # ── 小分子配体参数化（如果提供了ligand_sdf）──────────────────────────
+        # ── Small molecule ligand parameterization (if ligand_sdf provided) ──
         ligand_itp = None
         ligand_gro = None
         if req.ligand_sdf:
@@ -205,7 +205,7 @@ async def run_gromacs(req: GROMACSRequest):
             lig_workdir = f"/data/oih/outputs/{req.job_name}/ligand"
             os.makedirs(lig_workdir, exist_ok=True)
 
-            # SDF → mol2（取第一个pose）
+            # SDF → mol2 (extract first pose)
             mol2_path = f"{lig_workdir}/ligand.mol2"
             r = subprocess.run(
                 ["obabel", lig_sdf, "-O", mol2_path, "-f", "1", "-l", "1"],
@@ -214,7 +214,7 @@ async def run_gromacs(req: GROMACSRequest):
             if not os.path.exists(mol2_path):
                 raise RuntimeError(f"obabel SDF→mol2 failed: {r.stderr}")
 
-            # acpype GAFF2参数化
+            # acpype GAFF2 parameterization
             r = subprocess.run(
                 ["acpype", "-i", mol2_path, "-b", "LIG", "-c", "gas", "-a", "gaff2", "-o", "gmx"],
                 capture_output=True, text=True, cwd=lig_workdir
@@ -227,7 +227,7 @@ async def run_gromacs(req: GROMACSRequest):
             ligand_gro = f"{lig_acpype_dir}/LIG_GMX.gro"
             posre_itp  = f"{lig_acpype_dir}/posre_LIG.itp"
 
-            # pdb2gmx只处理蛋白质，配体通过itp单独引入
+            # pdb2gmx handles protein only; ligand is incorporated separately via itp
             # pdb_in already points to pdbfixer-cleaned PDB (set above)
             task.progress_msg = "Ligand parameterized ✅ — proceeding with complex MD..."
 
@@ -410,9 +410,9 @@ async def run_gromacs(req: GROMACSRequest):
         retcode, stdout, stderr = await run_in_container(
             settings.CONTAINER_GROMACS, ["bash", "-c", nvt_cmd], timeout=settings.TIMEOUT_GROMACS)
         if retcode != 0:
-            raise RuntimeError(f"NVT failed (check tc-grps, 蛋白配体体系需用 Protein_LIG Water_and_ions):\n{stderr[-2000:]}")
+            raise RuntimeError(f"NVT failed (check tc-grps; protein-ligand systems require Protein_LIG Water_and_ions):\n{stderr[-2000:]}")
         if not os.path.exists(f"{job_dir}/nvt.gro"):
-            raise RuntimeError(f"NVT failed: nvt.gro not generated. 检查 tc-grps 设置。\n{_read_log_tail(f'{workdir}/nvt.log')}")
+            raise RuntimeError(f"NVT failed: nvt.gro not generated. Check tc-grps settings.\n{_read_log_tail(f'{workdir}/nvt.log')}")
 
         # 7. NPT equilibration
         task.progress = 70

@@ -1,227 +1,227 @@
-# Binder Design Workflow — 统一决策链
+# Binder Design Workflow — Unified Decision Chain
 
-## 完整流程
-靶标输入 → Tier分类 → RAG 2层搜索 → PeSTo PPI预测 →
-Hotspot选择 → 域截取 → RFdiffusion/BindCraft → ProteinMPNN →
-ESM2 → AF3验证 → ADC组装
+## Complete Workflow
+Target input -> Tier classification -> RAG 2-layer search -> PeSTo PPI prediction ->
+Hotspot selection -> Domain truncation -> RFdiffusion/BindCraft -> ProteinMPNN ->
+ESM2 -> AF3 validation -> ADC assembly
 
-## 1. Tier 分级
-- Tier1: KNOWN_COMPLEXES命中 或 RAG Layer1搜到共晶/mutagenesis界面
-  → extract_interface_residues → 直接做hotspot
-- Tier3: 无已知界面 → PeSTo + RAG + conservation 多工具共识
+## 1. Tier Classification
+- Tier1: KNOWN_COMPLEXES hit or RAG Layer1 found co-crystal/mutagenesis interface
+  -> extract_interface_residues -> use directly as hotspot
+- Tier3: no known interface -> PeSTo + RAG + conservation multi-tool consensus
 
-## 2. RAG 两层搜索（所有靶点必须先执行）
-Layer 1 (PPI interface — 最高优先级):
+## 2. RAG Two-Layer Search (must be executed first for all targets)
+Layer 1 (PPI interface — highest priority):
   "{target} protein complex co-crystal binding partner interface residues"
-  → 搜到实验验证残基 → 直接用，跳过计算预测
+  -> found experimentally validated residues -> use directly, skip computational prediction
 
-Layer 2 (epitope fallback — 仅当Layer1无结果):
+Layer 2 (epitope fallback — only when Layer1 yields no results):
   "{target} epitope binding site"
 
-关键规则：B-cell epitope ≠ binder design hotspot
-- DiscoTope3/IEDB 预测免疫原性，不适合binder hotspot
-- CD36实证: DiscoTope3 A397-400 → ipTM=0.33全败
-- Baker lab从未用epitope工具选hotspot
+Key rule: B-cell epitope ≠ binder design hotspot
+- DiscoTope3/IEDB predicts immunogenicity, not suitable for binder hotspot
+- CD36 evidence: DiscoTope3 A397-400 -> ipTM=0.33 all failed
+- Baker lab has never used epitope tools to select hotspots
 
-## 3. Hotspot 发现：Tier决定方法
+## 3. Hotspot Discovery: Tier Determines Method
 
-### 核心规则：Tier1 用 extract_interface，Tier3 用 PeSTo
-| Tier | 条件 | Hotspot 方法 | 示例 |
-|------|------|-------------|------|
-| Tier1 | PDB有共晶复合物 | `extract_interface_residues` 直接提取界面残基 | HER2(1N8Z), EGFR(1YY9), PD-L1(4ZQK) |
-| Tier3 | 无共晶/无已知binding partner | PeSTo 预测单链PPI界面 | CD36(5LGD), TROP2(7PEE), Nectin-4(4GJT) |
+### Core Rule: Tier1 uses extract_interface, Tier3 uses PeSTo
+| Tier | Condition | Hotspot Method | Example |
+|------|-----------|---------------|---------|
+| Tier1 | PDB has co-crystal complex | `extract_interface_residues` directly extracts interface residues | HER2(1N8Z), EGFR(1YY9), PD-L1(4ZQK) |
+| Tier3 | No co-crystal/no known binding partner | PeSTo predicts single-chain PPI interface | CD36(5LGD), TROP2(7PEE), Nectin-4(4GJT) |
 
-**禁止**: 对Tier1靶点跑PeSTo（浪费时间，且共晶界面比预测更可靠）
-**禁止**: 对Tier3靶点跑extract_interface（无共晶→无界面可提取）
+**Prohibited**: running PeSTo on Tier1 targets (wastes time, co-crystal interface is more reliable than prediction)
+**Prohibited**: running extract_interface on Tier3 targets (no co-crystal -> no interface to extract)
 
 ### Tier1: extract_interface_residues
-- 输入: 共晶复合物PDB + receptor_chain + ligand_chains
-- 输出: 界面残基列表（距离<5Å的接触残基）
-- 直接用作 RFdiffusion hotspot，无需额外预测
+- Input: co-crystal complex PDB + receptor_chain + ligand_chains
+- Output: interface residue list (contact residues within <5A distance)
+- Used directly as RFdiffusion hotspot, no additional prediction needed
 
-### Tier3: PeSTo PPI 界面预测
+### Tier3: PeSTo PPI Interface Prediction
 - ROC AUC 0.92（vs MaSIF-site 0.80）
-- **必须输入单链PDB**（复合物会压低已占界面分数，如PD-L1从0.44→0.99）
-- 操作: 先用gemmi提取target单链PDB → 再调用pesto_predict
-- 部署: proteinmpnn容器内 /app/pesto/
+- **Must input single-chain PDB** (complex will suppress occupied interface scores, e.g., PD-L1 from 0.44->0.99)
+- Operation: first extract target single-chain PDB with gemmi -> then call pesto_predict
+- Deployment: inside proteinmpnn container at /app/pesto/
 
-### PeSTo 已验证靶点难度表（仅Tier3靶点）
-| 靶点 | PDB | Chain | Max PPI | >0.5残基 | 难度 |
-|------|-----|-------|---------|----------|------|
-| TrkA | 1HE7 | A | 0.999 | 59 | 极容易 |
-| Nectin-4 | 4GJT | A | 0.966 | 56 | 容易 |
-| CD36 | 5LGD | A | 0.865 | 8 | 中等 |
-| TROP2 | 7PEE | full | 0.422 | 0 | 困难 |
+### PeSTo Validated Target Difficulty Table (Tier3 targets only)
+| Target | PDB | Chain | Max PPI | >0.5 residues | Difficulty |
+|--------|-----|-------|---------|----------------|------------|
+| TrkA | 1HE7 | A | 0.999 | 59 | Very easy |
+| Nectin-4 | 4GJT | A | 0.966 | 56 | Easy |
+| CD36 | 5LGD | A | 0.865 | 8 | Moderate |
+| TROP2 | 7PEE | full | 0.422 | 0 | Difficult |
 
-## 4. Hotspot 选择规则
-来源优先级:
-1. 共晶界面残基（extract_interface, Tier1）>>> 所有计算预测
-2. PeSTo PPI interface (score > 0.5, Tier3) > 单一计算工具
-3. 保守+表面+中等凹度 > 高暴露但平坦
+## 4. Hotspot Selection Rules
+Source priority:
+1. Co-crystal interface residues (extract_interface, Tier1) >>> all computational predictions
+2. PeSTo PPI interface (score > 0.5, Tier3) > single computational tool
+3. Conserved + surface-exposed + moderate concavity > highly exposed but flat
 
-空间聚类: _cluster_hotspots()
-- Cα距离 ≤ 15Å，每组最多5个残基
-- 分散热点 → _multi_cluster_hotspots() 分组独立设计
-- 至少含1带电残基 + 1疏水残基
+Spatial clustering: _cluster_hotspots()
+- CA distance <= 15A, max 5 residues per group
+- Dispersed hotspots -> _multi_cluster_hotspots() grouped into independent designs
+- Must contain at least 1 charged residue + 1 hydrophobic residue
 
-## 5. 评分公式（PPI优化版，替代旧6D）
+## 5. Scoring Formula (PPI-optimized version, replaces old 6D)
 rag(0.30) + pesto_ppi(0.25) + conservation(0.20) +
 sasa(0.10) + electrostatics(0.15)
 
-已移除:
-- P2Rank (小分子口袋工具，不适合PPI)
+Removed:
+- P2Rank (small molecule pocket tool, not suitable for PPI)
 - DiscoTope3 epitope (B-cell epitope ≠ PPI interface)
-- DiffDock (小分子对接工具，已从pipeline移除)
+- DiffDock (small molecule docking tool, removed from pipeline)
 
-## 6. 域截取（DOMAIN_REGISTRY）
-已注册: HER2 Domain IV / CD36 CLESH region / EGFR Domain III / PDL1 IgV
-规则: 全长>500aa必须截取到~200aa
-好处: AF3速度5-8x，精度持平或更高
+## 6. Domain Truncation (DOMAIN_REGISTRY)
+Registered: HER2 Domain IV / CD36 CLESH region / EGFR Domain III / PDL1 IgV
+Rule: full-length >500aa must be truncated to ~200aa
+Benefit: AF3 speed 5-8x, accuracy equal or better
 
-## 7. 双路并行设计
-PathA: RFdiffusion (hotspot指定) → ProteinMPNN → ESM2
-PathB: BindCraft (无hotspot，AF2自由探索)
-两路都进AF3 validation，择优
+## 7. Dual-Path Parallel Design
+PathA: RFdiffusion (hotspot specified) -> ProteinMPNN -> ESM2
+PathB: BindCraft (no hotspot, AF2 free exploration)
+Both paths enter AF3 validation, select the best
 
-## 8. AF3 验证
+## 8. AF3 Validation
 - num_seeds=3
-- 当前阈值 ipTM >= 0.6
-- 动态超时: <500aa 1200s, 500-1000aa 2400s, >1000aa 3600s
+- Current threshold ipTM >= 0.6
+- Dynamic timeout: <500aa 1200s, 500-1000aa 2400s, >1000aa 3600s
 
-## 9. ADC Assembly（仅通过AF3的设计）
-FreeSASA → 表面暴露Lys → linker_select → rdkit_conjugate
-DAR=4, NHS-PEG4-MMAE, 7条NHS-amine SMARTS
+## 9. ADC Assembly (only for designs passing AF3)
+FreeSASA -> surface-exposed Lys -> linker_select -> rdkit_conjugate
+DAR=4, NHS-PEG4-MMAE, 7 NHS-amine SMARTS patterns
 
-## 10. 工具适用范围
-- DiffDock: 已移除，仅小分子
-- P2Rank/fpocket: 仅小分子docking pipeline
-- DiscoTope3: 不参与binder评分，仅作辅助参考
-- IgFold: 仅nanobody/antibody，de novo binder跳过
-- PeSTo: PPI interface预测，替代P2Rank+DiscoTope3
+## 10. Tool Scope
+- DiffDock: removed, small molecules only
+- P2Rank/fpocket: small molecule docking pipeline only
+- DiscoTope3: does not participate in binder scoring, auxiliary reference only
+- IgFold: nanobody/antibody only, skip for de novo binder
+- PeSTo: PPI interface prediction, replaces P2Rank+DiscoTope3
 
-## 11. 多靶点并行调度策略
+## 11. Multi-Target Parallel Scheduling Strategy
 
-### GPU 资源模型 (RTX 4090, 44GB)
-| 工具 | VRAM | 时间 | 可并行 |
+### GPU Resource Model (RTX 4090, 44GB)
+| Tool | VRAM | Time | Parallelizable |
 |------|------|------|--------|
-| RFdiffusion | 4-10GB | 20min | 3个并行 (共~20GB) |
-| ProteinMPNN | 4GB | 2min | 可与RFdiff并行 |
-| ESM2 | 6GB | 5min | 可与MPNN并行 |
-| AF3 | 20GB | 15min | 必须独占 |
-| BindCraft | 16GB | 30min | 最多+1个小任务 |
-| PeSTo | 0 (CPU) | 10s | 不占GPU |
-| FreeSASA | 0 (CPU) | 5s | 不占GPU |
+| RFdiffusion | 4-10GB | 20min | 3 parallel (~20GB total) |
+| ProteinMPNN | 4GB | 2min | Can run parallel with RFdiff |
+| ESM2 | 6GB | 5min | Can run parallel with MPNN |
+| AF3 | 20GB | 15min | Must run exclusively |
+| BindCraft | 16GB | 30min | Max +1 small task |
+| PeSTo | 0 (CPU) | 10s | No GPU usage |
+| FreeSASA | 0 (CPU) | 5s | No GPU usage |
 
-### 最优调度：pipeline式流水线
+### Optimal Scheduling: Pipeline-Style
 ```
-GPU时间线:
+GPU timeline:
 ─────────────────────────────────────────────────
-RFdiff(靶1) + RFdiff(靶2) + RFdiff(靶3)  ← 3并行
+RFdiff(target1) + RFdiff(target2) + RFdiff(target3)  <- 3 parallel
     ↓              ↓              ↓
-MPNN(靶1) + RFdiff(靶4) + MPNN(靶2)      ← 穿插
+MPNN(target1) + RFdiff(target4) + MPNN(target2)      <- interleaved
     ↓                              ↓
-AF3(靶1_val0) + MPNN(靶3)                ← AF3独占+小任务
+AF3(target1_val0) + MPNN(target3)                <- AF3 exclusive + small task
     ↓
-AF3(靶1_val1)
+AF3(target1_val1)
     ↓
-AF3(靶2_val0) + MPNN(靶4)
+AF3(target2_val0) + MPNN(target4)
     ...
 ─────────────────────────────────────────────────
-CPU时间线（完全并行，不等GPU）:
-PeSTo(所有靶点) | RAG(所有靶点) | FreeSASA | ipSAE计算
+CPU timeline (fully parallel, does not wait for GPU):
+PeSTo(all targets) | RAG(all targets) | FreeSASA | ipSAE calculation
 ─────────────────────────────────────────────────
 ```
 
-### Qwen 调度规则
-1. **Pipeline 在 CPU 队列**：pipeline 是编排器，不占 GPU slot
-2. **GPU semaphore=3**：最多3个GPU任务并行（VRAM-based routing 自动判断）
-3. **RFdiffusion 可3并行**：每个4-10GB，3个共20-30GB < 44GB
-4. **AF3 必须独占**：20GB，同时最多跑1个AF3 + 1个小任务(MPNN/ESM2)
-5. **CPU任务随时跑**：PeSTo/FreeSASA/RAG/RDKit 不受GPU限制
-6. **失败恢复**：RFdiffusion 完成的 backbone 保留在 outputs/，MPNN 可以手动补跑
+### Scheduling Rules
+1. **Pipeline runs on CPU queue**: pipeline is an orchestrator, does not occupy GPU slot
+2. **GPU semaphore=3**: max 3 GPU tasks in parallel (VRAM-based routing auto-determines)
+3. **RFdiffusion can run 3 parallel**: 4-10GB each, 3 total 20-30GB < 44GB
+4. **AF3 must run exclusively**: 20GB, at most 1 AF3 + 1 small task (MPNN/ESM2) simultaneously
+5. **CPU tasks run anytime**: PeSTo/FreeSASA/RAG/RDKit not limited by GPU
+6. **Failure recovery**: completed RFdiffusion backbones remain in outputs/, MPNN can be manually re-run
 
-### 批量提交策略
-当用户要求多个靶点时：
+### Batch Submission Strategy
+When users request multiple targets:
 ```python
-# 正确：一次提交所有，让调度器自动排队
+# Correct: submit all at once, let scheduler auto-queue
 for target in targets:
-    submit_pipeline(target)  # 全部 pending，按 VRAM 自动调度
+    submit_pipeline(target)  # all pending, auto-scheduled by VRAM
 
-# 错误：等一个完了再提下一个
+# Wrong: wait for one to complete before submitting next
 for target in targets:
     submit_pipeline(target)
-    wait_until_complete()  # 浪费GPU空闲时间
+    wait_until_complete()  # wastes GPU idle time
 ```
 
-### 失败恢复模式
-如果 pipeline 中途失败（如 MPNN timeout）：
-1. 检查哪一步完成了（RFdiffusion backbone 在 outputs/ 里）
-2. 手动补跑失败步骤（不需要重跑 RFdiffusion）
-3. 示例：CLESH v4 RFdiffusion ✅ → MPNN timeout → 手动提交 9 个 MPNN 任务
+### Failure Recovery Mode
+If pipeline fails midway (e.g., MPNN timeout):
+1. Check which step completed (RFdiffusion backbone in outputs/)
+2. Manually re-run failed step (no need to re-run RFdiffusion)
+3. Example: CLESH v4 RFdiffusion done -> MPNN timeout -> manually submit 9 MPNN tasks
 
-## 案例参考
-HER2 (Tier1): C558-C573 → ipTM=0.86, 3/10 pass, ADC成功
-CD36 DiscoTope3: A397-400 → ipTM=0.33, ipSAE=0.000, 0/10 全败
-CD36 PeSTo v5: A187-194 → ipTM=0.55, ipSAE=0.193, 最佳CD36设计
-CD36 PeSTo v6 n=50: ipTM=0.18, 更多≠更好（稀释了探索聚焦）
-CD36 CLESH: E101/D106/E108/D109 → MPNN timeout，手动补跑中
+## Case References
+HER2 (Tier1): C558-C573 -> ipTM=0.86, 3/10 pass, ADC successful
+CD36 DiscoTope3: A397-400 -> ipTM=0.33, ipSAE=0.000, 0/10 all failed
+CD36 PeSTo v5: A187-194 -> ipTM=0.55, ipSAE=0.193, best CD36 design
+CD36 PeSTo v6 n=50: ipTM=0.18, more != better (diluted exploration focus)
+CD36 CLESH: E101/D106/E108/D109 -> MPNN timeout, manual re-run in progress
 
-## 域截取自主决策规则（不依赖硬编码 DOMAIN_REGISTRY）
+## Domain Truncation Autonomous Decision Rules (independent of hardcoded DOMAIN_REGISTRY)
 
-当 DOMAIN_REGISTRY 没有该靶点时，Qwen 应自主确定截取范围：
+When DOMAIN_REGISTRY does not have the target, the agent should autonomously determine truncation range:
 
-### Step 1: 查 UniProt domain 注释
-- Signal peptide（截掉）
-- Transmembrane（截掉）
-- Topological domain: Extracellular（保留）
+### Step 1: Check UniProt domain annotations
+- Signal peptide (remove)
+- Transmembrane (remove)
+- Topological domain: Extracellular (keep)
 - Domain: Ig-like D1/D2/D3
 
-### Step 2: 确定 hotspot 所在的最小结构域
-- 截取该 domain ± 30 残基 buffer
+### Step 2: Determine the minimal domain containing the hotspot
+- Truncate to that domain +/- 30 residue buffer
 
-### Step 3: 大小验证
-- 目标: 100-250aa（AF3 最高效区间）
-- <100aa: 扩大 buffer; >500aa: 必须截取
+### Step 3: Size validation
+- Target: 100-250aa (AF3 most efficient range)
+- <100aa: expand buffer; >500aa: must truncate
 
-### Step 4: 结构完整性
-- 不切断 beta-sheet/alpha-helix
-- 二硫键 Cys-Cys 配对都要在范围内
-- 边界选 loop/linker 区域
+### Step 4: Structural integrity
+- Do not cut through beta-sheet/alpha-helix
+- Disulfide bond Cys-Cys pairs must both be within range
+- Choose loop/linker regions as boundaries
 
-### 截取公式
+### Truncation Formula
 center = mean(hotspots); range = (min(hotspots)-50, max(hotspots)+50)
-如果 <80aa，扩大到 center ± 60
+If <80aa, expand to center +/- 60
 
-### 案例
-- HER2 C558-C573 → Domain IV (488-630) 142aa → ipTM=0.86
-- CD36 PeSTo A187-194 → (140-240) 100aa → 待验证
-- CD36 全长 469aa → ipTM=0.33 失败
+### Cases
+- HER2 C558-C573 -> Domain IV (488-630) 142aa -> ipTM=0.86
+- CD36 PeSTo A187-194 -> (140-240) 100aa -> pending validation
+- CD36 full-length 469aa -> ipTM=0.33 failed
 
-## CRITICAL: RFdiffusion输出链顺序规则
+## CRITICAL: RFdiffusion Output Chain Order Rules
 
-RFdiffusion binder_design模式输出PDB中，**binder永远是最短的链**，但链名不固定：
-- HER2（原始chain C）→ RFD输出 chain A=binder(214aa), chain B=target(76aa截断)
-- CD36（原始chain A）→ RFD输出 chain A=target(400aa), chain B=binder(78-95aa)
-- EGFR（原始chain A）→ RFD输出 chain A=target(613aa), chain B=binder(74aa)
+In RFdiffusion binder_design mode output PDB, **binder is always the shortest chain**, but chain names are not fixed:
+- HER2 (original chain C) -> RFD output chain A=binder(214aa), chain B=target(76aa truncated)
+- CD36 (original chain A) -> RFD output chain A=target(400aa), chain B=binder(78-95aa)
+- EGFR (original chain A) -> RFD output chain A=target(613aa), chain B=binder(74aa)
 
-### MPNN chains_to_design 规则（2026-03-26 最终修复）
-- **默认值 "auto"**：router自动用gemmi检测最短链，设计该链序列。不需要你指定。
-- **绝不要传 chains_to_design="A"**：这是2026-03-24的严重bug，导致CD36/EGFR/Trop2全部设计了target蛋白(400aa)而非binder(80aa)
-- **验证**：MPNN FASTA的designed sequence长度应60-120aa（binder）。如果>200aa=设计了错误的链。
+### MPNN chains_to_design Rules (2026-03-26 final fix)
+- **Default value "auto"**: router automatically uses gemmi to detect shortest chain and designs that chain's sequence. No need to specify.
+- **Never pass chains_to_design="A"**: this was a critical bug from 2026-03-24, caused CD36/EGFR/Trop2 to all design the target protein (400aa) instead of the binder (80aa)
+- **Validation**: MPNN FASTA designed sequence length should be 60-120aa (binder). If >200aa = designed the wrong chain.
 
-### ipSAE 验证（2026-03-26 新增，AF3后必须执行）
-AF3完成后，必须调用 `ipsae_score(af3_output_dir=AF3输出目录)` 检查接口质量：
-- ipSAE > 0.15 → 真阳性，继续下游
-- ipSAE = 0.000 → 假阳性，binder未真正结合antigen
-- CD36 DT3路线：21个design全部ipSAE=0（ipTM最高0.43也是假阳性）
-- Nectin-4 best：ipTM=0.87, ipSAE=0.679（真阳性标杆）
+### ipSAE Validation (2026-03-26 addition, must execute after AF3)
+After AF3 completes, must call `ipsae_score(af3_output_dir=AF3_output_directory)` to check interface quality:
+- ipSAE > 0.15 -> true positive, proceed downstream
+- ipSAE = 0.000 -> false positive, binder did not truly bind antigen
+- CD36 DT3 route: all 21 designs had ipSAE=0 (highest ipTM=0.43 was also false positive)
+- Nectin-4 best: ipTM=0.87, ipSAE=0.679 (true positive benchmark)
 
-## 新增靶点检查清单（MANDATORY）
-添加靶点到 KNOWN_COMPLEXES 前必须完成：
-1. `gemmi.read_structure()` 查所有链的长度和编号
-2. 确认 receptor_chain（通常最长的蛋白链 = target）
-3. 确认 ligand_chains（抗体 Fab = Heavy + Light 两条链，不要猜）
-4. 写入 KNOWN_COMPLEXES 后用 `extract_interface` 验证 hotspot 数量合理（≥3 个残基）
-5. 在 `qwen_tools.py` 的 tool description 中同步更新 chain ID 列表
+## New Target Checklist (MANDATORY)
+Must complete before adding target to KNOWN_COMPLEXES:
+1. `gemmi.read_structure()` to check all chain lengths and numbering
+2. Confirm receptor_chain (usually the longest protein chain = target)
+3. Confirm ligand_chains (antibody Fab = Heavy + Light two chains, do not guess)
+4. After writing to KNOWN_COMPLEXES, use `extract_interface` to verify reasonable hotspot count (>=3 residues)
+5. Update chain ID list in `qwen_tools.py` tool description accordingly
 
-**反例：** EGFR 1YY9 猜了 ligand_chains=["B"]，实际是 ["C","D"]。CD20 6Y4J 只有单链无抗体，不能放进 KNOWN_COMPLEXES。
+**Counter-example:** EGFR 1YY9 guessed ligand_chains=["B"], actual was ["C","D"]. CD20 6Y4J has only a single chain with no antibody, cannot be added to KNOWN_COMPLEXES.

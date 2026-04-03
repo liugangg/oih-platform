@@ -1,6 +1,6 @@
 """
-快速路由端到端测试 — 独立脚本，不影响正式服务
-用法: /data/oih/miniconda/bin/python tests/test_fast_routes.py
+Fast route end-to-end test -- standalone script, does not affect production service
+Usage: /data/oih/miniconda/bin/python tests/test_fast_routes.py
 """
 import asyncio
 import sys
@@ -10,19 +10,19 @@ import httpx
 API = "http://localhost:8080"
 
 TESTS = [
-    # (消息, 期望路由名, 期望工具, 描述)
-    ("下载PDB 5XWR", "fetch_pdb", "fetch_pdb", "PDB下载"),
-    ("获取分子 aspirin", "fetch_molecule", "fetch_molecule", "小分子获取"),
-    ("搜索CD36相关文献", "literature", "search_literature", "文献检索"),
-    ("检测5LGD的结合口袋", "pocket", "fpocket_detect_pockets", "口袋检测"),
-    ("评估aspirin的ADMET", "admet", "chemprop_predict", "ADMET预测"),
-    ("预测1N8Z的B细胞表位", "epitope", "discotope3_predict", "表位预测"),
-    ("对接CD36和棕榈酸", "docking", "dock_ligand", "分子对接"),
-    ("用AlphaFold3预测TP53的结构", "af3_predict", "alphafold3_predict", "AF3预测"),
+    # (message, expected_route, expected_tool, description)
+    ("Download PDB 5XWR", "fetch_pdb", "fetch_pdb", "PDB_download"),
+    ("Fetch molecule aspirin", "fetch_molecule", "fetch_molecule", "molecule_fetch"),
+    ("Search CD36 related literature", "literature", "search_literature", "lit_search"),
+    ("Detect binding pockets of 5LGD", "pocket", "fpocket_detect_pockets", "pocket_detect"),
+    ("Evaluate ADMET of aspirin", "admet", "chemprop_predict", "ADMET_predict"),
+    ("Predict B-cell epitopes of 1N8Z", "epitope", "discotope3_predict", "epitope_pred"),
+    ("Dock CD36 with palmitic acid", "docking", "dock_ligand", "docking"),
+    ("Predict TP53 structure with AlphaFold3", "af3_predict", "alphafold3_predict", "AF3_predict"),
 ]
 
 async def test_one(msg, expect_route, expect_tool, desc, timeout=300):
-    """发送 SSE 请求，收集事件，检查路由和工具调用"""
+    """Send SSE request, collect events, verify route and tool calls"""
     session_id = f"test_{int(time.time())}_{desc}"
     start = time.time()
     events = []
@@ -41,10 +41,10 @@ async def test_one(msg, expect_route, expect_tool, desc, timeout=300):
                     evt = json.loads(line[6:])
                     events.append(evt)
 
-                    # 只等到第一个工具提交或结果就停（不等长任务完成）
+                    # Stop at first tool submission or result (don't wait for long tasks)
                     if evt["type"] in ("task_submitted", "tool_result", "answer", "error", "done"):
                         if evt["type"] == "task_submitted":
-                            # 收到 task_submitted 说明工具已成功调用，不用等完成
+                            # task_submitted means tool was successfully invoked, no need to wait for completion
                             events.append({"type": "_early_stop", "reason": "task_submitted"})
                             break
                         if evt["type"] in ("answer", "error", "done"):
@@ -54,7 +54,7 @@ async def test_one(msg, expect_route, expect_tool, desc, timeout=300):
 
     elapsed = time.time() - start
 
-    # 分析结果
+    # Analyze results
     is_fast = any(e.get("content", "").startswith("⚡") for e in events if e["type"] == "status")
     tools_called = [e["tool"] for e in events if e["type"] == "tool_call"]
     tasks_submitted = [e["tool"] for e in events if e["type"] == "task_submitted"]
@@ -71,17 +71,17 @@ async def test_one(msg, expect_route, expect_tool, desc, timeout=300):
 
 async def main():
     print(f"{'='*60}")
-    print(f"快速路由端到端测试 — {API}")
+    print(f"Fast route end-to-end test -- {API}")
     print(f"{'='*60}\n")
 
-    # 先检查服务
+    # Check service availability
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(f"{API}/health")
             if r.status_code != 200:
-                print("❌ 服务未启动"); return
+                print("Service not running"); return
     except:
-        print("❌ 无法连接服务"); return
+        print("Cannot connect to service"); return
 
     results = []
     for msg, expect_route, expect_tool, desc in TESTS:
@@ -91,9 +91,9 @@ async def main():
     passed = sum(results)
     total = len(results)
     print(f"\n{'='*60}")
-    print(f"结果: {passed}/{total} passed")
+    print(f"Result: {passed}/{total} passed")
     if passed < total:
-        print("失败的测试需要检查工具执行是否正常")
+        print("Failed tests need investigation of tool execution")
     print(f"{'='*60}")
 
 if __name__ == "__main__":

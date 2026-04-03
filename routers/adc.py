@@ -6,12 +6,12 @@ Supports 7 conjugation chemistries:
   maleimide_thiol, nhs_amine, hydrazone, oxime, disulfide, dbco_azide, transglutaminase
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# ADC 注意事项（来自 CLAUDE.md，勿手动编辑）：
-#   - Step 3: AF3 验证 — top5 MPNN → AF3 复合物 → ipTM 分级（≥0.75 high / ≥0.6 low_confidence）
-#   - 每步 try/except，单步失败标记 `partial: true` 不阻塞后续
-#   - AF3 任务间隔 5 秒避免 GPU OOM，timeout 1800s
-#   - Step 1-3: RFdiffusion → ProteinMPNN → AF3 验证（ipTM ≥0.75 high / ≥0.6 low_confidence）
-#   - 每步 try/except，单步失败标记 partial，不阻塞后续
+# ADC notes (from CLAUDE.md, do not manually edit):
+#   - Step 3: AF3 validation — top5 MPNN → AF3 complex → ipTM grading (>=0.75 high / >=0.6 low_confidence)
+#   - Each step wrapped in try/except; single-step failure marked `partial: true`, does not block subsequent steps
+#   - 5s delay between AF3 tasks to avoid GPU OOM, timeout 1800s
+#   - Step 1-3: RFdiffusion → ProteinMPNN → AF3 validation (ipTM >=0.75 high / >=0.6 low_confidence)
+#   - Each step wrapped in try/except; single-step failure marked partial, does not block subsequent steps
 # --- /SYNC_NOTES ---
 
 import os
@@ -42,7 +42,7 @@ REACTION_REGISTRY = {
             "[C:1]=[C:2]C(=O)[N:4].[SH1:3]>>[C:1]([S:3])[C:2]C(=O)[N:4]",
             "[C:1]=[C:2]C(=O).[SH1:3]>>[C:1]([S:3])[C:2]C(=O)",
         ],
-        "chemistry_cn": "马来酰亚胺-巯基偶联 (Michael addition)",
+        "chemistry_cn": "Maleimide-thiol conjugation (Michael addition)",
         "linker_end": "maleimide",
         "payload_end": "thiol/cysteine",
         "examples": ["SMCC", "maleimide-PEG4", "MC-VC-PABC"],
@@ -68,7 +68,7 @@ REACTION_REGISTRY = {
             "[C:1](=O)[OH1].[OH1:2][#6:3]>>[C:1](=O)[O:2][#6:3]",
             "[C:1](=O)ON1C(=O)CCC1=O.[OH1:2]>>[C:1](=O)[O:2]",
         ],
-        "chemistry_cn": "NHS酯/羧酸-胺/醇缩合 (酰胺键/酯键)",
+        "chemistry_cn": "NHS ester/carboxylic acid-amine/alcohol condensation (amide/ester bond)",
         "linker_end": "NHS_ester / carboxylic_acid",
         "payload_end": "primary_amine / lysine / hydroxyl",
         "examples": ["VC-PABC", "SMCC", "SPDB"],
@@ -84,7 +84,7 @@ REACTION_REGISTRY = {
             "[CH1:1]=O.[NH2:2][N:3]>>[CH1:1]=[N:2][N:3]",
             "[C:1](=O)[#6:4].[NH2:2][N:3]>>[C:1](=[N:2][N:3])[#6:4]",
         ],
-        "chemistry_cn": "腙键形成 (pH响应性可裂解)",
+        "chemistry_cn": "Hydrazone bond formation (pH-responsive cleavable)",
         "linker_end": "hydrazide",
         "payload_end": "ketone / aldehyde",
         "examples": ["Hydrazone", "BMPH", "EMCH"],
@@ -99,7 +99,7 @@ REACTION_REGISTRY = {
             "[CH1:1]=O.[NH2:2][OH1]>>[CH1:1]=[N:2]O",
             "[C:1](=[O:3]).[NH2:2]O>>[C:1](=[N:2]O).[O:3]",
         ],
-        "chemistry_cn": "肟键形成 (稳定可裂解)",
+        "chemistry_cn": "Oxime bond formation (stable cleavable)",
         "linker_end": "hydroxylamine / aminooxy",
         "payload_end": "aldehyde / ketone",
         "examples": ["aminooxy-PEG"],
@@ -114,7 +114,7 @@ REACTION_REGISTRY = {
             "[S:1][S:2].[SH1:3]>>[S:1][S:3]",
             "[SH1:1].[SH1:2]>>[S:1][S:2]",
         ],
-        "chemistry_cn": "二硫键形成 (还原性可裂解)",
+        "chemistry_cn": "Disulfide bond formation (reductive cleavable)",
         "linker_end": "pyridyldithiol / activated disulfide",
         "payload_end": "thiol",
         "examples": ["SPDP", "DTNB", "CL2"],
@@ -128,7 +128,7 @@ REACTION_REGISTRY = {
         "smarts_chain": [
             "[N-:1]=[N+:2]=[N:3].[C:4]#[C:5]>>[n:1]1[n:2]=[n:3][C:4]=[C:5]1",
         ],
-        "chemistry_cn": "SPAAC点击化学 (DBCO-叠氮, 生物正交)",
+        "chemistry_cn": "SPAAC click chemistry (DBCO-azide, bioorthogonal)",
         "linker_end": "DBCO / BCN (strained alkyne)",
         "payload_end": "azide",
         "examples": ["DBCO-PEG4", "BCN-NHS"],
@@ -140,7 +140,7 @@ REACTION_REGISTRY = {
     # ── Type 7: Transglutaminase (enzymatic, site-specific) ──────────────────
     "transglutaminase": {
         "smarts_chain": [],
-        "chemistry_cn": "转谷氨酰胺酶催化定点偶联 (酶促)",
+        "chemistry_cn": "Transglutaminase-catalyzed site-specific conjugation (enzymatic)",
         "linker_end": "amine-PEG / cadaverine",
         "payload_end": "glutamine_tag (Q295)",
         "examples": ["cadaverine-payload"],
@@ -483,11 +483,11 @@ async def linker_select(req: LinkerSelectRequest):
         parts = []
         adcs = top.get("approved_adcs", [])
         if adcs:
-            parts.append(f"已获批ADC使用: {', '.join(adcs[:2])}")
-        parts.append(f"反应类型: {top['reaction_type']}, DAR: {top['dar_range']}")
+            parts.append(f"Approved ADC usage: {', '.join(adcs[:2])}")
+        parts.append(f"Reaction type: {top['reaction_type']}, DAR: {top['dar_range']}")
         if top.get("stability_plasma") in ("high", "very_high"):
-            parts.append(f"血浆稳定性: {top['stability_plasma']}")
-        recommendation = f"推荐 {top['name']} — {'；'.join(parts)}"
+            parts.append(f"Plasma stability: {top['stability_plasma']}")
+        recommendation = f"Recommended {top['name']} — {'; '.join(parts)}"
 
     return {
         "recommended_linkers": [
