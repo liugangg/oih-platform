@@ -1,44 +1,44 @@
-# PTM Upload Paradigm — Qwen 决策范式
+# PTM Upload Paradigm — Qwen Decision Framework
 
-## 当收到带 [用户上传文件] 标记的 message 时
+## When receiving a message tagged with [User Uploaded File]
 
-### 规则1：优先使用已生成的输入文件，不要自己重建
-- 看到 af3_input.json 路径 → 直接传给 alphafold3 工具，不要重新写 JSON
-- 看到 gromacs_ptm_notes.json → 读取里面的 force_field 和 disulfide_pairs 参数
-- 看到 adc_input.json → 传给 freesasa，conjugation_sites 已预设
+### Rule 1: Prefer pre-generated input files; do not rebuild them
+- If af3_input.json path is present → pass directly to the alphafold3 tool; do not rewrite the JSON
+- If gromacs_ptm_notes.json is present → read the force_field and disulfide_pairs parameters from it
+- If adc_input.json is present → pass to freesasa; conjugation_sites are already preset
 
-### 规则2：PTM 与工具的对应关系
-| PTM类型 | 可用工具 | 不可用工具 | 注意事项 |
+### Rule 2: PTM-to-tool mapping
+| PTM Type | Available Tools | Unavailable Tools | Notes |
 |--------|---------|---------|---------|
-| 糖基化(NAG/FUC) | AlphaFold3 | GROMACS | GROMACS缺GLYCAM力场，只做AF3预测 |
-| 磷酸化(SEP/TPO) | AlphaFold3 | GROMACS(限制) | GROMACS需CHARMM36，告知用户精度有限 |
-| 二硫键(SSBOND) | AF3+GROMACS+RFdiffusion | — | GROMACS加-ss参数，RFdiffusion加--disulfide |
-| Cys偶联位点 | freesasa+rdkit_conjugate | — | 先freesasa确认可及性再rdkit_conjugate |
-| 不支持的PTM | — | 所有工具 | 明确告知用户该PTM平台暂不支持 |
+| Glycosylation (NAG/FUC) | AlphaFold3 | GROMACS | GROMACS lacks GLYCAM force field; use AF3 prediction only |
+| Phosphorylation (SEP/TPO) | AlphaFold3 | GROMACS (limited) | GROMACS requires CHARMM36; inform user that accuracy is limited |
+| Disulfide bond (SSBOND) | AF3+GROMACS+RFdiffusion | — | Add -ss flag for GROMACS, add --disulfide for RFdiffusion |
+| Cys conjugation site | freesasa+rdkit_conjugate | — | First confirm accessibility with freesasa, then run rdkit_conjugate |
+| Unsupported PTM | — | All tools | Explicitly inform the user that this PTM is not currently supported by the platform |
 
-### 规则3：FASTA 序列上传
-- 没有结构 → 先调 alphafold3 预测结构，再进行后续分析
-- 有结构需要设计突变 → 调 proteinmpnn 或 rfdiffusion
+### Rule 3: FASTA sequence upload
+- No structure available → first call alphafold3 to predict structure, then proceed with downstream analysis
+- Structure exists but mutations need to be designed → call proteinmpnn or rfdiffusion
 
-### 规则4：SMILES 上传
-- 小分子配体 → 先调 chemprop 预测ADMET，再调 gnina/autodock 对接
-- ADC payload → 调 rdkit_conjugate，smiles 直接传入
+### Rule 4: SMILES upload
+- Small molecule ligand → first call chemprop for ADMET prediction, then call gnina/autodock for docking
+- ADC payload → call rdkit_conjugate; pass SMILES directly
 
-### 规则5：不确定时
-- PTM 类型不认识 → 报告给用户，说明平台不支持，建议移除后重新上传
-- 文件解析失败 → 报告具体错误，不要猜测
+### Rule 5: When uncertain
+- Unrecognized PTM type → report to user, explain the platform does not support it, suggest removing it and re-uploading
+- File parsing failure → report the specific error; do not guess
 
-### 典型 workflow 示例
+### Typical Workflow Examples
 
-**用户上传含糖基化抗体PDB + "预测与CD36的结合"**
-1. 读取 af3_input.json（已包含糖基化配体）
-2. 调用 alphafold3(input_json=af3_input.json路径)
-3. 用 AF3 输出结构调用 fpocket 找结合口袋
-4. 调用 gnina 对接
-5. 汇报结合能 + ipTM
+**User uploads glycosylated antibody PDB + "predict binding to CD36"**
+1. Read af3_input.json (already contains glycosylation ligands)
+2. Call alphafold3(input_json=af3_input.json path)
+3. Use AF3 output structure to call fpocket for binding pocket detection
+4. Call gnina for docking
+5. Report binding energy + ipTM
 
-**用户粘贴 FASTA + "设计纳米抗体"**
-1. 调用 alphafold3 预测靶点结构（FASTA → 结构）
-2. 调用 rfdiffusion(target_pdb=预测结构, mode=binder_design)
-3. 调用 proteinmpnn 优化序列
-4. 调用 alphafold3 验证复合物 ipTM
+**User pastes FASTA + "design nanobody"**
+1. Call alphafold3 to predict target structure (FASTA → structure)
+2. Call rfdiffusion(target_pdb=predicted structure, mode=binder_design)
+3. Call proteinmpnn to optimize sequences
+4. Call alphafold3 to validate complex ipTM

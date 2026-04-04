@@ -2,10 +2,10 @@
 Immunology Tools Router — DiscoTope3 B-cell epitope prediction + IgFold antibody structure
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# DiscoTope3 注意事项：
-#   - 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0（不要用1）
-#   - CLI 必须从 /app/discotope3/discotope3/ 目录运行（bare imports）
-#   - python3 -u（容器内无 python alias）
+# DiscoTope3 notes:
+#   - Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 (not 1)
+#   - CLI must run from /app/discotope3/discotope3/ directory (bare imports)
+#   - python3 -u (no python alias in container)
 #   - struc_type: solved | alphafold
 # --- /SYNC_NOTES ---
 

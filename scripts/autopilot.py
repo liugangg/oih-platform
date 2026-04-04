@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-OIH Autopilot — 后台自动值班脚本
-=================================
-每 60s 扫描一次任务状态，自动推进后续步骤：
+OIH Autopilot — Background automatic monitoring script
+=======================================================
+Scans task status every 60s and automatically advances subsequent steps:
 
-1. pipeline 完成 → 收集 AF3 结果
-2. AF3 ipTM ≥ 0.4 → 自动跑 ipSAE
-3. ipSAE > 0.15 → 自动 CIF→PDB → FreeSASA → ADC 偶联
-4. 检测 GPU 僵尸进程 → 自动清理
-5. 所有结果写入 autopilot_results.jsonl
+1. Pipeline completed → collect AF3 results
+2. AF3 ipTM >= 0.4 → automatically run ipSAE
+3. ipSAE > 0.15 → automatically CIF→PDB → FreeSASA → ADC conjugation
+4. Detect GPU zombie processes → auto cleanup
+5. All results written to autopilot_results.jsonl
 
-用法: nohup python3 scripts/autopilot.py &
+Usage: nohup python3 scripts/autopilot.py &
 """
 import json
 import os

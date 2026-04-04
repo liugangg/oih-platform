@@ -1,74 +1,74 @@
-# RFdiffusion 完整工作流程（已验证）
+# RFdiffusion Complete Workflow (Verified)
 
-## 环境信息
-- 容器名：oih-rfdiffusion
-- 镜像：rfdiffusion:latest
-- Python：python3（3.10.12），注意不是 python，没有 python 命令
-- 推理脚本：/app/RFdiffusion/scripts/run_inference.py
-- 示例脚本：/app/RFdiffusion/examples/
+## Environment Information
+- Container name: oih-rfdiffusion
+- Image: rfdiffusion:latest
+- Python: python3 (3.10.12), note: not python, there is no python command
+- Inference script: /app/RFdiffusion/scripts/run_inference.py
+- Example scripts: /app/RFdiffusion/examples/
 
-## ⚠️ 关键Bug修复（必须在新容器部署后执行）
+## Warning: Critical Bug Fix (must be executed after new container deployment)
 
-### Bug：unconditional设计时默认input_pdb路径错误
-model_runners.py 中默认 pdb 路径用相对路径，导致找不到文件：
+### Bug: incorrect default input_pdb path during unconditional design
+model_runners.py uses a relative path for the default pdb, causing file not found:
 ```
 FileNotFoundError: .../rfdiffusion/inference/../../examples/input_pdbs/1qys.pdb
 ```
 
-**修复命令：**
+**Fix command:**
 ```bash
-# 备份原文件
+# Backup original file
 docker exec oih-rfdiffusion bash -c "cp \
   /usr/local/lib/python3.10/dist-packages/rfdiffusion/inference/model_runners.py \
   /usr/local/lib/python3.10/dist-packages/rfdiffusion/inference/model_runners.py.bak"
 
-# 修复路径
+# Fix path
 docker exec oih-rfdiffusion bash -c "sed -i \
   's|../../examples/input_pdbs/1qys.pdb|/app/RFdiffusion/examples/input_pdbs/1qys.pdb|' \
   /usr/local/lib/python3.10/dist-packages/rfdiffusion/inference/model_runners.py"
 
-# 验证
+# Verify
 docker exec oih-rfdiffusion bash -c "grep '1qys' \
   /usr/local/lib/python3.10/dist-packages/rfdiffusion/inference/model_runners.py"
 ```
 
-## ⚠️ 模型路径问题（docker-compose.yml已修复）
-- 模型实际位置（宿主机）：/data/rfdiffusion/models/
-- 容器内挂载路径：/data/models/rfdiffusion
-- docker-compose.yml 正确配置：
+## Warning: Model Path Issue (fixed in docker-compose.yml)
+- Actual model location (host): /data/rfdiffusion/models/
+- Container mount path: /data/models/rfdiffusion
+- Correct docker-compose.yml configuration:
   ```yaml
   volumes:
     - /data/rfdiffusion/models:/data/models/rfdiffusion:ro
   ```
 
-## ⚠️ GPU注意事项
-- NVIDIA_VISIBLE_DEVICES=1 映射宿主机GPU1为容器内GPU0
-- RFdiffusion 自动使用 CUDA device 0，无需手动指定
-- 显存需求约 8GB
+## Warning: GPU Notes
+- NVIDIA_VISIBLE_DEVICES=1 maps host GPU1 to container GPU0
+- RFdiffusion automatically uses CUDA device 0, no manual specification needed
+- VRAM requirement approximately 8GB
 
-## 可用模型文件（/data/rfdiffusion/models/）
-| 文件 | 用途 |
-|------|------|
-| Base_ckpt.pt | 基础蛋白骨架设计（最常用）|
-| Base_epoch8_ckpt.pt | Base模型早期checkpoint |
-| Complex_base_ckpt.pt | 蛋白-蛋白复合物/Binder设计 |
-| Complex_Fold_base_ckpt.pt | 复合物+fold conditioning |
-| Complex_beta_ckpt.pt | Complex beta版本 |
-| ActiveSite_ckpt.pt | 活性位点设计 |
-| InpaintSeq_ckpt.pt | 序列inpainting |
-| InpaintSeq_Fold_ckpt.pt | 序列inpainting+fold |
-| RF_structure_prediction_weights.pt | 结构预测权重（内部使用）|
+## Available Model Files (/data/rfdiffusion/models/)
+| File | Purpose |
+|------|---------|
+| Base_ckpt.pt | Basic protein backbone design (most commonly used) |
+| Base_epoch8_ckpt.pt | Base model early checkpoint |
+| Complex_base_ckpt.pt | Protein-protein complex/binder design |
+| Complex_Fold_base_ckpt.pt | Complex + fold conditioning |
+| Complex_beta_ckpt.pt | Complex beta version |
+| ActiveSite_ckpt.pt | Active site design |
+| InpaintSeq_ckpt.pt | Sequence inpainting |
+| InpaintSeq_Fold_ckpt.pt | Sequence inpainting + fold |
+| RF_structure_prediction_weights.pt | Structure prediction weights (internal use) |
 
-## 示例脚本位置
-/app/RFdiffusion/examples/ 内有完整官方示例，使用前先查阅：
+## Example Script Location
+/app/RFdiffusion/examples/ contains complete official examples, consult before use:
 ```bash
 docker exec oih-rfdiffusion bash -c "ls /app/RFdiffusion/examples/"
 docker exec oih-rfdiffusion bash -c "cat /app/RFdiffusion/examples/design_ppi.sh"
 ```
 
-## 完整推理命令
+## Complete Inference Commands
 
-### 1. Unconditional设计（无条件从头设计）✅已验证
+### 1. Unconditional Design (de novo design from scratch) - Verified
 ```bash
 docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   inference.output_prefix=/data/oih/outputs/rfdiffusion/unconditional \
@@ -76,9 +76,9 @@ docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   'contigmap.contigs=[100-200]' \
   inference.num_designs=10
 ```
-注意：不需要 inference.input_pdb，bug修复后自动使用默认1qys.pdb
+Note: inference.input_pdb not needed; after bug fix, automatically uses default 1qys.pdb
 
-### 2. Motif Scaffolding（固定活性位点设计支架）
+### 2. Motif Scaffolding (design scaffold around fixed active site)
 ```bash
 docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   inference.output_prefix=/data/oih/outputs/rfdiffusion/motif \
@@ -88,7 +88,7 @@ docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   inference.num_designs=10
 ```
 
-### 3. Binder设计（蛋白-蛋白相互作用）
+### 3. Binder Design (protein-protein interaction)
 ```bash
 docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   inference.output_prefix=/data/oih/outputs/rfdiffusion/binder \
@@ -101,7 +101,7 @@ docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   inference.num_designs=10
 ```
 
-### 4. Partial Diffusion（对已有结构做局部扩散）
+### 4. Partial Diffusion (local diffusion on existing structure)
 ```bash
 docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   inference.output_prefix=/data/oih/outputs/rfdiffusion/partial \
@@ -112,58 +112,58 @@ docker exec oih-rfdiffusion python3 /app/RFdiffusion/scripts/run_inference.py \
   inference.num_designs=10
 ```
 
-## Contig语法说明（从官方示例提取）
-| 语法 | 含义 |
-|------|------|
-| `[100-200]` | 设计100-200残基新蛋白（随机长度）|
-| `[100]` | ❌错误，会被解析成整数，必须用 100-100 |
-| `[A163-181]` | 固定A链163-181残基（motif）|
-| `[10-40/A163-181/10-40]` | 10-40新设计 + 固定motif + 10-40新设计 |
-| `[A1-150/0 70-100]` | A链1-150 + 链断开(0) + 70-100新binder |
-| `ppi.hotspot_res=[A59,A83,A91]` | 指定binder必须接触的热点残基（建议3-6个）|
+## Contig Syntax Reference (extracted from official examples)
+| Syntax | Meaning |
+|--------|---------|
+| `[100-200]` | Design new protein of 100-200 residues (random length) |
+| `[100]` | ERROR: parsed as integer, must use 100-100 |
+| `[A163-181]` | Fix chain A residues 163-181 (motif) |
+| `[10-40/A163-181/10-40]` | 10-40 new design + fixed motif + 10-40 new design |
+| `[A1-150/0 70-100]` | Chain A 1-150 + chain break (0) + 70-100 new binder |
+| `ppi.hotspot_res=[A59,A83,A91]` | Specify hotspot residues the binder must contact (recommend 3-6) |
 
-## 性能（RTX 4090 45GB）
-- unconditional 100-200残基：约0.40分钟/设计
-- 建议 num_designs=10 批量生成，筛选最优
+## Performance (RTX 4090 45GB)
+- Unconditional 100-200 residues: approximately 0.40 min/design
+- Recommend num_designs=10 for batch generation, then select best
 
-## 与ProteinMPNN配合使用
-RFdiffusion只生成骨架（无序列），需配合ProteinMPNN设计序列：
+## Integration with ProteinMPNN
+RFdiffusion only generates backbones (no sequence), must pair with ProteinMPNN for sequence design:
 ```
-RFdiffusion → backbone.pdb → ProteinMPNN → sequences.fa → AlphaFold3验证
+RFdiffusion -> backbone.pdb -> ProteinMPNN -> sequences.fa -> AlphaFold3 validation
 ```
 
-## PDB 预处理（自动）
-Router 在 binder_design 模式下自动处理靶蛋白 PDB：
-1. **去除 HETATM**：水/配体/糖基化修饰会干扰 ContigMap
-2. **顺序重编号**：消除残基间隙（gap），例如 PDB 2A91 原始编号 102→107 跳跃，重编号后 102→103 连续
-3. **Hotspot 映射**：hotspot 残基号自动从原始编号转换到新编号
-4. 输出文件：`{input}_renum.pdb`
+## PDB Preprocessing (automatic)
+Router automatically preprocesses target protein PDB in binder_design mode:
+1. **Remove HETATM**: water/ligands/glycosylation modifications interfere with ContigMap
+2. **Sequential renumbering**: eliminate residue gaps, e.g., PDB 2A91 original numbering 102->107 jump, renumbered to 102->103 continuous
+3. **Hotspot mapping**: hotspot residue numbers automatically converted from original to new numbering
+4. Output file: `{input}_renum.pdb`
 
-### Hotspot 格式
-- 用户/Qwen 可输入：`S310,F311`（氨基酸名+编号）或 `310,311`（纯编号）
-- Router 自动归一化为 RFdiffusion 格式：`[A306,A307]`（chain ID + 重编号后的编号）
+### Hotspot Format
+- User/agent can input: `S310,F311` (amino acid name + number) or `310,311` (number only)
+- Router automatically normalizes to RFdiffusion format: `[A306,A307]` (chain ID + renumbered number)
 
-### 为什么需要重编号
-RFdiffusion ContigMap 遍历 `A1-{max_resid}`，逐个检查残基是否存在于 PDB。
-如果 PDB 有 gap（如晶体学缺失残基），ContigMap 会抛出：
+### Why Renumbering Is Needed
+RFdiffusion ContigMap iterates `A1-{max_resid}`, checking each residue exists in the PDB.
+If PDB has gaps (e.g., crystallographically missing residues), ContigMap throws:
 `AssertionError: ('A', 103) is not in pdb file!`
 
-## 错误排查
-| 错误 | 原因 | 解决 |
-|------|------|------|
-| python: command not found | 容器内只有python3 | 用 python3 |
-| FileNotFoundError: 1qys.pdb | model_runners.py路径bug | 执行上方bug修复命令 |
-| AttributeError: 'int' has no strip | contig写成[50]整数 | 改成[50-50]或[100-200] |
-| AssertionError: ('A', N) not in pdb | PDB有残基gap | 自动重编号已修复；如仍出现检查HETATM |
-| 模型加载失败 | 挂载路径错误 | 检查docker-compose.yml挂载 |
-| CUDA OOM | 显存不足 | 减少num_designs或缩短contig长度 |
+## Troubleshooting
+| Error | Cause | Solution |
+|-------|-------|----------|
+| python: command not found | Container only has python3 | Use python3 |
+| FileNotFoundError: 1qys.pdb | model_runners.py path bug | Execute bug fix command above |
+| AttributeError: 'int' has no strip | contig written as [50] integer | Change to [50-50] or [100-200] |
+| AssertionError: ('A', N) not in pdb | PDB has residue gaps | Auto-renumbering fixed; if still occurs check HETATM |
+| Model loading failure | Mount path incorrect | Check docker-compose.yml mount |
+| CUDA OOM | Insufficient VRAM | Reduce num_designs or shorten contig length |
 
 <!-- AUTO_SYNC_FROM_CLAUDE_MD -->
-## ⚠️ 注意事项（自动同步自 CLAUDE.md）
+## Warning: Notes (auto-synced from CLAUDE.md)
 
-- 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
-- **timeout 必须 7200s**（不是 3600s）
-- **num_designs 用 10**（不要 20，太慢）
-- **hotspot 必须空间聚集**（<= 15Å centroid），分散的会极慢
+- Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 / gpu_id=0 (do not use 1)
+- **timeout must be 7200s** (not 3600s)
+- **num_designs use 10** (not 20, too slow)
+- **hotspots must be spatially clustered** (<= 15A centroid), dispersed ones will be extremely slow
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->

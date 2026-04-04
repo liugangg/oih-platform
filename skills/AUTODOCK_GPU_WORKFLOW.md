@@ -1,34 +1,34 @@
-# AutoDock-GPU 完整前处理流程（已验证）
+# AutoDock-GPU Complete Preprocessing Workflow (Verified)
 
-## 工具分布
-- obabel, autogrid4: 宿主机 /usr/bin/
-- autodock_gpu_128wi: 容器 oih-autodock-gpu /usr/local/bin/
-- prody: 容器 oih-autodock-gpu 内 Python
+## Tool Distribution
+- obabel, autogrid4: host machine /usr/bin/
+- autodock_gpu_128wi: container oih-autodock-gpu /usr/local/bin/
+- prody: Python inside the oih-autodock-gpu container
 
-## 完整流程
+## Complete Workflow
 
-### 步骤1: prody 清理 PDB（容器内）
+### Step 1: Clean PDB with prody (inside container)
 ```python
 from prody import parsePDB, writePDB
 struct = parsePDB('input.pdb', altloc='first')
-protein = struct.select('protein and chain A B')  # 只保留蛋白链
+protein = struct.select('protein and chain A B')  # keep only protein chains
 writePDB('protein_clean.pdb', protein)
 ```
 
-### 步骤2: obabel 生成带电荷 pdbqt（宿主机）
+### Step 2: Generate pdbqt with charges using obabel (host machine)
 ```bash
 obabel protein_clean.pdb -O receptor.pdbqt -xr --partialcharge gasteiger
 ```
-注意：-xr 表示rigid receptor，必须加 --partialcharge gasteiger 否则电荷为0导致autogrid4报错
+Note: -xr means rigid receptor; --partialcharge gasteiger is required, otherwise charges are 0 and autogrid4 will error
 
-### 步骤3: 获取口袋坐标（从fpocket结果自动获取）
+### Step 3: Obtain pocket coordinates (automatically extracted from fpocket results)
 ```python
-# 从fpocket输出解析 box_center 和 box_size
+# Parse box_center and box_size from fpocket output
 # box_center = pocket['x_cent'], pocket['y_cent'], pocket['z_cent']
-# box_size 默认 25 25 25（可根据口袋体积调整）
+# box_size defaults to 25 25 25 (adjustable based on pocket volume)
 ```
 
-### 步骤4: 生成 GPF 文件（宿主机）
+### Step 4: Generate GPF file (host machine)
 ```bash
 cat > receptor.gpf << GPF
 npts 60 60 60
@@ -51,15 +51,15 @@ dsolvmap receptor.d.map
 dielectric -0.1465
 GPF
 ```
-注意：receptor_types 必须与 pdbqt 中实际原子类型一致
+Note: receptor_types must match the actual atom types in the pdbqt file
 
-### 步骤5: autogrid4 生成 grid（宿主机）
+### Step 5: Generate grid with autogrid4 (host machine)
 ```bash
 cd /workdir && autogrid4 -p receptor.gpf -l receptor.glg
 ```
-生成文件：receptor.maps.fld, receptor.*.map
+Output files: receptor.maps.fld, receptor.*.map
 
-### 步骤6: autodock_gpu_128wi 对接（容器内）
+### Step 6: Docking with autodock_gpu_128wi (inside container)
 ```bash
 autodock_gpu_128wi \
   --ffile receptor.maps.fld \
@@ -69,25 +69,25 @@ autodock_gpu_128wi \
   --resnam result
 ```
 
-### 配体准备（从SMILES）
+### Ligand Preparation (from SMILES)
 ```bash
-# 宿主机 obabel 从 SMILES 生成 3D pdbqt
+# Generate 3D pdbqt from SMILES using obabel on host machine
 obabel -:"SMILES_STRING" -opdbqt --gen3d -O ligand.pdbqt --partialcharge gasteiger
 ```
 
-## 非标准残基处理策略
-- 检测 HETATM：grep HETATM input.pdb | awk '{print $4}' | sort -u
-- NAG/糖基化等：prody select 时用 'protein' 自动排除
-- 如果 obabel 报 kekulize 警告：通常不影响结果，可忽略
+## Non-standard Residue Handling Strategy
+- Detect HETATM: grep HETATM input.pdb | awk '{print $4}' | sort -u
+- NAG/glycosylation etc.: automatically excluded when using 'protein' selector in prody
+- If obabel reports kekulize warnings: usually does not affect results, can be ignored
 
-## 错误处理
-- autogrid4 "atom types不匹配"：检查 pdbqt 实际原子类型重新写 gpf
-- autogrid4 "no partial charges"：重新用 --partialcharge gasteiger 生成 pdbqt
-- meeko HasQuery报错：meeko版本与rdkit不兼容，改用obabel替代
+## Error Handling
+- autogrid4 "atom types mismatch": check actual atom types in pdbqt and rewrite gpf
+- autogrid4 "no partial charges": regenerate pdbqt with --partialcharge gasteiger
+- meeko HasQuery error: meeko version incompatible with rdkit, use obabel as alternative
 
 <!-- AUTO_SYNC_FROM_CLAUDE_MD -->
-## ⚠️ 注意事项（自动同步自 CLAUDE.md）
+## Notes (auto-synced from CLAUDE.md)
 
-- 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
+- Inside the container NVIDIA_VISIBLE_DEVICES=1; always use device=0 / gpu_id=0 (do not use 1)
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->

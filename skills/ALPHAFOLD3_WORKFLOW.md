@@ -1,15 +1,15 @@
-# AlphaFold3工作流文档
+# AlphaFold3 Workflow Documentation
 
-## 基本信息
-- 容器：oih-alphafold3
-- 软件路径：/app/alphafold/run_alphafold.py
-- 模型路径：/data/alphafold3_models/（af3.bin）
-- 数据库路径：/data/alphafold3_db/
-- 输入/输出：/data/af3/input/ 和 /data/af3/output/
-- GPU：NVIDIA_VISIBLE_DEVICES=1 → 容器内cuda:0
-- 推理时间：~82秒（100aa单链）
+## Basic Information
+- Container: oih-alphafold3
+- Software path: /app/alphafold/run_alphafold.py
+- Model path: /data/alphafold3_models/ (af3.bin)
+- Database path: /data/alphafold3_db/
+- Input/Output: /data/af3/input/ and /data/af3/output/
+- GPU: NVIDIA_VISIBLE_DEVICES=1 -> container cuda:0
+- Inference time: ~82 seconds (100aa single chain)
 
-## 输入JSON格式
+## Input JSON Format
 ```json
 {
   "name": "job_name",
@@ -27,13 +27,13 @@
 }
 ```
 
-## 支持的输入类型
-- protein：蛋白质序列
-- rna/dna：核酸序列
-- ligand：小分子（SMILES）
-- 多链复合物：多个sequences条目
+## Supported Input Types
+- protein: protein sequences
+- rna/dna: nucleic acid sequences
+- ligand: small molecules (SMILES)
+- Multi-chain complexes: multiple sequences entries
 
-## 运行命令
+## Run Command
 ```bash
 docker exec oih-alphafold3 bash -c "
 python3 /app/alphafold/run_alphafold.py \
@@ -44,90 +44,90 @@ python3 /app/alphafold/run_alphafold.py \
   --flash_attention_implementation=triton"
 ```
 
-## 输出文件
-- *_model.cif：最佳结构（mmCIF格式）
-- *_confidences.json：每残基pLDDT置信度
-- *_summary_confidences.json：整体指标（ipTM、pTM等）
-- *_ranking_scores.csv：多seed排名
-- seed-X_sample-Y/：各采样结构
+## Output Files
+- *_model.cif: best structure (mmCIF format)
+- *_confidences.json: per-residue pLDDT confidence
+- *_summary_confidences.json: overall metrics (ipTM, pTM, etc.)
+- *_ranking_scores.csv: multi-seed ranking
+- seed-X_sample-Y/: individual sampled structures
 
-## 注意事项
-- data pipeline（MSA搜索）CPU密集，128核全速运行
-- --run_data_pipeline=false 跳过MSA（需已有MSA缓存）
-- --run_inference=false 只跑MSA不推理
-- 多链复合物预测ipTM>0.6为可信结合
-- ⚠️ 不挂载宿主机cuda lib64（同BindCraft，JAX自带CUDA）
+## Notes
+- Data pipeline (MSA search) is CPU-intensive, runs at full speed on 128 cores
+- --run_data_pipeline=false skips MSA (requires existing MSA cache)
+- --run_inference=false runs MSA only without inference
+- Multi-chain complex prediction ipTM>0.6 indicates reliable binding
+- Warning: do not mount host cuda lib64 (same as BindCraft, JAX includes its own CUDA)
 
-## 任务调度规则
+## Task Scheduling Rules
 
-### 永不降级（_NO_DEGRADED_TOOLS）
-AF3 和 BindCraft 永远不进 DEGRADED 队列（CPU fallback 会 OOM crash）。
-VRAM 不足时每 60s 重试检查 GPU1，等到空闲后进 GPU 队列。
+### Never Degrade (_NO_DEGRADED_TOOLS)
+AF3 and BindCraft never enter the DEGRADED queue (CPU fallback would OOM crash).
+When VRAM is insufficient, retry checking GPU1 every 60s, enter GPU queue when available.
 
-### 超时处理（_wait_for_af3_task）
-Pipeline 中 AF3 使用无限等待：每 30s poll 任务状态。
-仅以下情况判定失败：
-- OOM（exit code 1 + memory 关键词）
-- 容器 exit 1
-- 任务被 cancel
-- 连续 10 次返回相同错误
+### Timeout Handling (_wait_for_af3_task)
+Pipeline AF3 uses infinite wait: poll task status every 30s.
+Only the following conditions are considered failures:
+- OOM (exit code 1 + memory keyword)
+- Container exit 1
+- Task cancelled
+- 10 consecutive identical errors
 
-**超时误判诊断**：如果 AF3 "超时"但可能已完成，检查输出目录：
+**Timeout misdiagnosis**: if AF3 "timed out" but may have completed, check the output directory:
 ```bash
 find /data/oih/outputs -name "*model.cif" | grep af3
-cat <output_dir>/*ranking_scores.csv   # 读取真实 ipTM
+cat <output_dir>/*ranking_scores.csv   # read actual ipTM
 ```
-有 CIF 文件 → 超时是误判，用真实 ipTM 继续 pipeline。
+If CIF file exists -> timeout was a misdiagnosis, use actual ipTM to continue pipeline.
 
-### Pipeline 中 AF3 调用间隔
-多个 AF3 任务连续提交时，每个之间间隔 5 秒，避免 GPU OOM。
+### AF3 Call Interval in Pipeline
+When submitting multiple AF3 tasks consecutively, space each 5 seconds apart to avoid GPU OOM.
 
 <!-- AUTO_SYNC_FROM_CLAUDE_MD -->
-## ⚠️ 注意事项（自动同步自 CLAUDE.md）
+## Warning: Notes (auto-synced from CLAUDE.md)
 
-- 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
-- **根因**：v3 任务 5 个 AF3 设计全部失败。rank1 超时 1800s（但实际已跑完，ipTM=0.48），rank2-5 被路由到 DEGRADED 队列 OOM exit 1
-- **修复 1**：新增 `_wait_for_af3_task()` 无限等待函数，每 30s poll，仅在 OOM/exit1/cancelled/连续10次同错 时判定失败
-- 不再降级到 DEGRADED 导致 OOM crash
-- **原因**：CIF→PDB 转换失败时 `af3_pdb=None` → `"No PDB for FreeSASA"` 错误
-- AF3 验证时按结构域截取抗原序列，避免全长序列降低ipTM精度
-- `num_seeds=3` 用于 binder_design_pipeline AF3 验证（速度/准确性平衡）
+- Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 / gpu_id=0 (do not use 1)
+- **Root cause**: v3 task all 5 AF3 designs failed. rank1 timed out at 1800s (but actually completed, ipTM=0.48), rank2-5 were routed to DEGRADED queue OOM exit 1
+- **Fix 1**: added `_wait_for_af3_task()` infinite wait function, polls every 30s, only considers OOM/exit1/cancelled/10 consecutive same errors as failure
+- No longer degrades to DEGRADED causing OOM crash
+- **Cause**: when CIF->PDB conversion fails `af3_pdb=None` -> `"No PDB for FreeSASA"` error
+- During AF3 validation, truncate antigen sequence by domain to avoid full-length sequences reducing ipTM accuracy
+- `num_seeds=3` for binder_design_pipeline AF3 validation (speed/accuracy balance)
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->
 
-## DOMAIN_REGISTRY 抗原域截取（2026-03-22 验证）
+## DOMAIN_REGISTRY Antigen Domain Truncation (2026-03-22 validated)
 
-AF3 对短序列复合物预测更准确。pipeline 自动按 DOMAIN_REGISTRY 截取抗原结构域。
+AF3 is more accurate for short sequence complex predictions. Pipeline automatically truncates antigen domains per DOMAIN_REGISTRY.
 
-### 已注册靶标
-| 靶标 | 域名 | UniProt 范围 | 截取后长度 | 说明 |
-|------|------|-------------|-----------|------|
-| HER2 | domain4 | 488-630 | ~202aa | trastuzumab 表位 C558-C573 |
-| HER2 | domain2 | 172-308 | ~196aa | pertuzumab 表位 |
-| CD36 | extracellular | 30-439 | ~469aa | 胞外大环 |
-| EGFR | domain3 | 361-481 | ~180aa | cetuximab 表位 |
-| PD-L1 | IgV | 19-127 | ~168aa | PD-1 结合界面 |
+### Registered Targets
+| Target | Domain | UniProt Range | Truncated Length | Description |
+|--------|--------|--------------|-----------------|-------------|
+| HER2 | domain4 | 488-630 | ~202aa | trastuzumab epitope C558-C573 |
+| HER2 | domain2 | 172-308 | ~196aa | pertuzumab epitope |
+| CD36 | extracellular | 30-439 | ~469aa | Extracellular loop |
+| EGFR | domain3 | 361-481 | ~180aa | cetuximab epitope |
+| PD-L1 | IgV | 19-127 | ~168aa | PD-1 binding interface |
 
-### HER2 实测结果
-| Design | 抗原长度 | ipTM | 结论 |
-|--------|---------|------|------|
-| val_0 | 1015aa (全长) | 0.84 | ✅ |
-| val_1 | 1015aa (全长) | 0.70 | ✅ |
-| val_2 | 202aa (Domain4) | **0.86** | ✅ 截短更优 |
+### HER2 Experimental Results
+| Design | Antigen Length | ipTM | Conclusion |
+|--------|--------------|------|------------|
+| val_0 | 1015aa (full-length) | 0.84 | Pass |
+| val_1 | 1015aa (full-length) | 0.70 | Pass |
+| val_2 | 202aa (Domain4) | **0.86** | Pass - truncation is superior |
 
-### 截取规则
-- padding = 30aa（域边界两侧各保留 30aa 柔性区）
-- 未知蛋白以 hotspot 中心 ±100aa 截取
-- 多个可成药域 → 分别跑 AF3，取最高 ipTM
+### Truncation Rules
+- padding = 30aa (retain 30aa flexible region on each side of domain boundary)
+- For unknown proteins, truncate hotspot center +/- 100aa
+- Multiple druggable domains -> run AF3 separately, take highest ipTM
 
-## AF3 动态超时
-| 总序列长度 | Timeout |
-|-----------|---------|
+## AF3 Dynamic Timeout
+| Total Sequence Length | Timeout |
+|----------------------|---------|
 | <500aa | 1200s (20min) |
 | 500-1000aa | 2400s (40min) |
 | >1000aa | 3600s (60min) |
 
-## GPU VRAM 限制
-- AF3 ~20GB，必须独占 GPU
-- GPU Semaphore = 1（同一时间只跑 1 个 GPU 任务）
-- RTX 4090 总共 44GB，两个大模型并发 = OOM
+## GPU VRAM Limitations
+- AF3 ~20GB, must run exclusively on GPU
+- GPU Semaphore = 1 (only 1 GPU task at a time)
+- RTX 4090 total 44GB, two large models concurrently = OOM

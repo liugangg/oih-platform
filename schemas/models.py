@@ -239,11 +239,11 @@ class ESMTask(str, Enum):
     batch_embed = "batch_embed"
 
 class ESMRequest(BaseModel):
-    job_name: str = Field(..., description="任务名称")
-    sequences: list[str] = Field(..., description="蛋白质序列列表")
-    task: ESMTask = Field(ESMTask.embedding, description="任务类型")
-    model_name: str = Field("esm2_t33_650M_UR50D", description="ESM2模型")
-    repr_layer: int = Field(33, description="提取嵌入的层")
+    job_name: str = Field(..., description="Job name")
+    sequences: list[str] = Field(..., description="List of protein sequences")
+    task: ESMTask = Field(ESMTask.embedding, description="Task type")
+    model_name: str = Field("esm2_t33_650M_UR50D", description="ESM2 model")
+    repr_layer: int = Field(33, description="Layer to extract embeddings from")
 
 class ESMResult(BaseModel):
     job_name: str
@@ -271,14 +271,14 @@ class ChempropTask(str, Enum):
     train   = "train"
 
 class ChempropRequest(BaseModel):
-    job_name: str = Field(..., description="任务名称")
+    job_name: str = Field(..., description="Job name")
     task: ChempropTask = Field(ChempropTask.predict)
-    smiles: list[str] | None = Field(None, description="SMILES列表")
-    model_path: str | None = Field(None, description="模型路径")
-    train_csv: str | None = Field(None, description="训练CSV路径")
-    target_columns: list[str] | None = Field(None, description="目标列名")
-    epochs: int = Field(30, description="训练轮数")
-    property_name: str = Field("activity", description="属性名称")
+    smiles: list[str] | None = Field(None, description="SMILES list")
+    model_path: str | None = Field(None, description="Model path")
+    train_csv: str | None = Field(None, description="Training CSV path")
+    target_columns: list[str] | None = Field(None, description="Target column names")
+    epochs: int = Field(30, description="Training epochs")
+    property_name: str = Field("activity", description="Property name")
 
 class ChempropResult(BaseModel):
     job_name: str

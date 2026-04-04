@@ -1,24 +1,24 @@
-# Matplotlib Figures -- 论文图表生成操作规程
+# Matplotlib Figures -- Paper Figure Generation Protocol
 
-## 环境
+## Environment
 - Python: `/data/oih/miniconda/bin/python`
-- 无头模式 (必须在 import pyplot 前设置):
+- Headless mode (must set before importing pyplot):
 ```python
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 ```
 
-## Nature Communications 排版规范
-- 单栏宽: 89mm (3.5in), 双栏宽: 183mm (7.2in)
-- 字号: 标签 7-8pt, 标题 8-9pt, 注释 5.5-6.5pt
-- DPI: 300 (栅格), 同时输出 PDF (矢量)
-- 字体: Arial > Liberation Sans > DejaVu Sans
+## Nature Communications Typesetting Standards
+- Single column width: 89mm (3.5in), Double column width: 183mm (7.2in)
+- Font size: Labels 7-8pt, Titles 8-9pt, Annotations 5.5-6.5pt
+- DPI: 300 (raster), also output PDF (vector)
+- Font: Arial > Liberation Sans > DejaVu Sans
 
-### 标准 rcParams
+### Standard rcParams
 ```python
 plt.rcParams.update({
-    'font.family': 'Arial',     # 或 Liberation Sans
+    'font.family': 'Arial',     # or Liberation Sans
     'font.size': 8,
     'axes.linewidth': 0.8,
     'xtick.major.width': 0.6, 'ytick.major.width': 0.6,
@@ -28,23 +28,23 @@ plt.rcParams.update({
 })
 ```
 
-## Okabe-Ito 色盲友好调色板 (全项目统一)
+## Okabe-Ito Colorblind-Friendly Palette (Project-wide)
 ```python
 C = {
-    'HER2':    '#0072B2',   # 蓝
-    'Nectin4': '#E69F00',   # 橙
-    'EGFR':    '#009E73',   # 绿
-    'CD36':    '#D55E00',   # 红橙
-    'TROP2':   '#999999',   # 灰
-    'DT3':     '#CC79A7',   # 粉紫 (DiscoTope3)
-    'PeSTo':   '#56B4E9',   # 天蓝
-    'Agent':   '#F0E442',   # 黄
-    'thresh':  '#D55E00',   # 阈值虚线
-    'text2':   '#666666',   # 辅助文字
+    'HER2':    '#0072B2',   # blue
+    'Nectin4': '#E69F00',   # orange
+    'EGFR':    '#009E73',   # green
+    'CD36':    '#D55E00',   # red-orange
+    'TROP2':   '#999999',   # gray
+    'DT3':     '#CC79A7',   # pink-purple (DiscoTope3)
+    'PeSTo':   '#56B4E9',   # sky blue
+    'Agent':   '#F0E442',   # yellow
+    'thresh':  '#D55E00',   # threshold dashed line
+    'text2':   '#666666',   # secondary text
 }
 ```
 
-## 保存函数 (同时输出 PNG + PDF)
+## Save Function (Output both PNG + PDF)
 ```python
 OUT = '/data/oih/outputs/paper_figures'
 os.makedirs(OUT, exist_ok=True)
@@ -55,22 +55,22 @@ def savefig(fig, name):
     plt.close(fig)
 ```
 
-## 数据规范
-- **只用 post-fix 验证数据** (修复 MPNN chains_to_design bug 后的数据)
-- ipTM 阈值: 0.6 (虚线), ipSAE 阈值: 0.15 (虚线)
-- 成功标准: ipSAE >= 0.15
-- 阈值线统一用 `C['thresh']` 颜色, `ls='--'`, `lw=0.8`, `alpha=0.5-0.7`
+## Data Standards
+- **Only use post-fix validation data** (data after fixing MPNN chains_to_design bug)
+- ipTM threshold: 0.6 (dashed line), ipSAE threshold: 0.15 (dashed line)
+- Success criterion: ipSAE >= 0.15
+- Threshold lines: use `C['thresh']` color, `ls='--'`, `lw=0.8`, `alpha=0.5-0.7`
 
-## 常用图表类型
+## Common Chart Types
 
-### 1. Strip/Swarm Plot (ipTM/ipSAE 对比)
+### 1. Strip/Swarm Plot (ipTM/ipSAE comparison)
 ```python
 fig, ax = plt.subplots(figsize=(70/25.4, 55/25.4))
 jitter = 0.08
 np.random.seed(42)
 x = np.ones(n) * group_idx + np.random.uniform(-jitter, jitter, n)
 ax.scatter(x, values, c=color, s=50, zorder=3, edgecolors='white', linewidth=0.5)
-# 均值线
+# mean line
 ax.plot([group_idx-.15, group_idx+.15], [mean]*2, c=color, lw=2)
 ```
 
@@ -81,7 +81,7 @@ ax.scatter(iptm, ipsae, c=color, marker='o', s=45,
            edgecolors='white', linewidth=0.4, label=target, zorder=3)
 ax.axhline(0.15, color=C['thresh'], ls='--', lw=0.8, alpha=0.5)
 ax.axvline(0.5, color=C['thresh'], ls='--', lw=0.8, alpha=0.5)
-# 象限着色
+# quadrant shading
 ax.axhspan(0.15, ymax, xmin=0.5/xlim, alpha=0.04, color='#009E73')
 ```
 
@@ -120,43 +120,43 @@ for i, (stage, count) in enumerate(zip(stages, counts)):
     ax.text(0.5, i, f'{stage}: {count}', ha='center', va='center', fontsize=7)
 ```
 
-## 标准样式规则
+## Standard Style Rules
 
-### 子面板标记
+### Sub-panel Labels
 ```python
 fig.text(0.01, 0.98, 'a', fontsize=12, fontweight='bold', va='top')
 ```
 
-### 轴清理 (所有图必须)
+### Axis Cleanup (Required for all plots)
 ```python
 ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
 ```
 
-### 尺寸约定 (mm -> inches)
+### Size Convention (mm -> inches)
 ```python
 figsize=(width_mm/25.4, height_mm/25.4)
-# 单栏: 89mm, 1.5栏: 120mm, 双栏: 183mm
+# Single column: 89mm, 1.5 column: 120mm, Double column: 183mm
 ```
 
-### 注释箭头
+### Annotation Arrows
 ```python
 ax.annotate('label', xy=(x, y), xytext=(tx, ty),
             fontsize=5.5, arrowprops=dict(arrowstyle='->', lw=0.5, color=C['text2']),
             color=C['text2'])
 ```
 
-## 字体注意事项
-- 避免 Unicode 符号 (mu, alpha 等)，用 ASCII: `mu=`, `>=`, `<=`
-- 如果必须用希腊字母，用 matplotlib mathtext: `r'$\mu$'`
-- 中文注释不要放在图里（期刊不接受），放 figure legend
+## Font Notes
+- Avoid Unicode symbols (mu, alpha, etc.), use ASCII: `mu=`, `>=`, `<=`
+- If Greek letters are needed, use matplotlib mathtext: `r'$\mu$'`
+- Do not put non-English annotations in figures (journals don't accept), place in figure legend
 
-## 输出
-- 所有图保存到 `/data/oih/outputs/paper_figures/`
-- 命名: `fig{N}{letter}_{description}.png` 和 `.pdf`
-- 同时保存 PNG (栅格) 和 PDF (矢量)
+## Output
+- All figures saved to `/data/oih/outputs/paper_figures/`
+- Naming: `fig{N}{letter}_{description}.png` and `.pdf`
+- Save both PNG (raster) and PDF (vector)
 
-## 完整模板
+## Complete Template
 ```python
 #!/usr/bin/env python3
 import matplotlib

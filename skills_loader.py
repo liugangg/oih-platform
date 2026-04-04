@@ -34,38 +34,38 @@ SKILL_MAP = {
 }
 
 KEYWORD_SKILL_MAP = {
-    "autodock":    ["autodock", "dock", "docking", "vina", "autogrid", "gpf", "pdbqt", "ligand", "smiles", "对接", "分子对接", "配体"],
-    "gromacs":     ["gromacs", "gmx", "molecular dynamics", "md simulation", "trajectory", "nvt", "npt", "分子动力学", "模拟"],
-    "diffdock":    ["diffdock", "blind dock", "blind docking", "盲对接"],
-    "alphafold3":  ["alphafold", "af3", "structure predict", "fold", "折叠", "结构预测"],
-    "rfdiffusion": ["rfdiffusion", "diffusion", "protein design", "scaffold", "蛋白设计", "antibody", "抗体", "nanobody", "纳米抗体", "binder design", "binder"],
-    "proteinmpnn": ["proteinmpnn", "mpnn", "sequence design", "inverse folding", "序列设计"],
-    "bindcraft":   ["bindcraft", "binder design", "binder", "结合蛋白设计"],
-    "esm":         ["esm", "embedding", "protein language", "蛋白语言模型", "esm2", "protein embedding"],
-    "chemprop":    ["chemprop", "admet", "property predict", "molecular property", "分子性质", "toxicity", "solubility", "bioactivity", "qsar"],
-    "fpocket":     ["fpocket", "p2rank", "pocket", "binding site", "cavity", "druggable", "口袋", "结合位点"],
-    "vina":        ["vina", "vina-gpu", "vina_gpu", "autodockvina", "快速对接"],
-    "gnina":       ["gnina", "cnn score", "cnn docking", "深度学习对接"],
-    "overview":    ["what tools", "available tools", "what can you do", "capabilities", "help", "能做什么", "有哪些工具", "平台介绍"],
-    "ptm_upload":  ["上传", "upload", "pdb文件", "fasta", "smiles", "糖基化", "磷酸化", "二硫键", "ptm", "修饰", "modification"],
-    "adc":         ["adc", "ADC", "antibody drug conjugate", "抗体偶联", "偶联药物", "linker", "payload", "MMAE", "DM1", "maleimide", "conjugate", "DAR", "药抗比"],
-    "self_diagnosis": ["失败", "错误", "error", "failed", "oom", "超时", "timeout", "修复", "诊断", "重试", "retry", "crash", "崩溃", "debug"],
-    "discotope3":  ["discotope", "epitope", "表位", "b-cell", "b cell", "抗原表位", "免疫原性", "immunogenicity", "epitope prediction", "epitope mapping", "表位预测", "表位映射"],
-    "igfold":      ["igfold", "antibody structure", "nanobody fold", "抗体结构预测", "纳米抗体折叠", "antibody folding"],
-    "tool_scope":  ["适用范围", "tool scope", "when to use", "禁止", "误用", "binder_type", "tier"],
+    "autodock":    ["autodock", "dock", "docking", "vina", "autogrid", "gpf", "pdbqt", "ligand", "smiles", "molecular docking"],
+    "gromacs":     ["gromacs", "gmx", "molecular dynamics", "md simulation", "trajectory", "nvt", "npt", "simulation"],
+    "diffdock":    ["diffdock", "blind dock", "blind docking"],
+    "alphafold3":  ["alphafold", "af3", "structure predict", "fold", "folding", "structure prediction"],
+    "rfdiffusion": ["rfdiffusion", "diffusion", "protein design", "scaffold", "antibody", "nanobody", "binder design", "binder"],
+    "proteinmpnn": ["proteinmpnn", "mpnn", "sequence design", "inverse folding"],
+    "bindcraft":   ["bindcraft", "binder design", "binder", "binding protein design"],
+    "esm":         ["esm", "embedding", "protein language", "protein language model", "esm2", "protein embedding"],
+    "chemprop":    ["chemprop", "admet", "property predict", "molecular property", "toxicity", "solubility", "bioactivity", "qsar"],
+    "fpocket":     ["fpocket", "p2rank", "pocket", "binding site", "cavity", "druggable"],
+    "vina":        ["vina", "vina-gpu", "vina_gpu", "autodockvina", "fast docking"],
+    "gnina":       ["gnina", "cnn score", "cnn docking", "deep learning docking"],
+    "overview":    ["what tools", "available tools", "what can you do", "capabilities", "help", "platform overview"],
+    "ptm_upload":  ["upload", "pdb file", "fasta", "smiles", "glycosylation", "phosphorylation", "disulfide bond", "ptm", "modification"],
+    "adc":         ["adc", "ADC", "antibody drug conjugate", "antibody conjugate", "conjugate drug", "linker", "payload", "MMAE", "DM1", "maleimide", "conjugate", "DAR", "drug-antibody ratio"],
+    "self_diagnosis": ["failure", "error", "failed", "oom", "timeout", "fix", "diagnose", "retry", "crash", "debug"],
+    "discotope3":  ["discotope", "epitope", "b-cell", "b cell", "antigenic epitope", "immunogenicity", "epitope prediction", "epitope mapping"],
+    "igfold":      ["igfold", "antibody structure", "nanobody fold", "antibody structure prediction", "nanobody folding", "antibody folding"],
+    "tool_scope":  ["tool scope", "when to use", "prohibited", "misuse", "binder_type", "tier"],
     "binder_design": ["binder design", "hotspot", "binding site", "where to bind", "target analysis",
                        "interface", "de novo binder", "pocket scoring", "tier classification",
-                       "domain truncation", "6D", "热点", "结合位点", "靶点分析", "域截取"],
-    "domain_knowledge": ["什么是", "原理", "解释", "科普", "知识", "概念", "what is", "explain",
-                          "how does", "mechanism", "principle", "ipTM", "pLDDT", "RMSD"],
-    "matplotlib_figures": ["matplotlib", "图表", "plot", "figure", "chart", "画图", "柱状图",
-                           "散点图", "热图", "heatmap", "可视化", "visualization"],
-    "pymol_rendering": ["pymol", "渲染", "render", "结构图", "蛋白图", "cartoon", "surface",
-                        "structure image", "结构可视化"],
-    "rag": ["文献", "论文", "literature", "pubmed", "paper", "检索", "搜索文献", "search paper",
-            "bioRxiv", "知识库", "knowledge base"],
-    "paper_metrics": ["metrics", "paper data", "tsv", "论文数据", "指标提取", "binder_len", "antigen_len",
-                      "ipSAE", "pDockQ", "extract metrics", "验证结果", "all_designs"],
+                       "domain truncation", "6D"],
+    "domain_knowledge": ["what is", "principle", "explain", "knowledge", "concept", "how does",
+                          "mechanism", "ipTM", "pLDDT", "RMSD"],
+    "matplotlib_figures": ["matplotlib", "chart", "plot", "figure", "draw chart", "bar chart",
+                           "scatter plot", "heatmap", "visualization"],
+    "pymol_rendering": ["pymol", "render", "rendering", "structure image", "protein image", "cartoon", "surface",
+                        "structure visualization"],
+    "rag": ["literature", "pubmed", "paper", "search literature", "search paper",
+            "bioRxiv", "knowledge base"],
+    "paper_metrics": ["metrics", "paper data", "tsv", "metric extraction", "binder_len", "antigen_len",
+                      "ipSAE", "pDockQ", "extract metrics", "validation results", "all_designs"],
 }
 
 def load_skill(skill_name: str) -> str:
@@ -89,15 +89,15 @@ PIPELINE_SKILL_BUNDLES = {
     # binder/ADC design → binder_design workflow already covers RFdiffusion/MPNN/AF3/ADC rules
     # Only add tool_scope (small, complementary) — no need to duplicate individual tool workflows
     "binder_design": {
-        "triggers": ["binder", "nanobody", "antibody", "抗体", "纳米抗体",
-                      "结合蛋白", "adc", "ADC", "偶联", "drug conjugate",
-                      "设计.*binder", "design.*binder"],
+        "triggers": ["binder", "nanobody", "antibody", "binding protein",
+                      "adc", "ADC", "conjugate", "drug conjugate",
+                      "design.*binder"],
         "skills": ["binder_design", "tool_scope"],
     },
     # drug discovery → binder_design has the full pipeline; add fpocket for pocket analysis
     "drug_discovery": {
-        "triggers": ["drug discovery", "药物发现", "靶点.*设计", "pipeline",
-                      "端到端", "end.to.end"],
+        "triggers": ["drug discovery", "target.*design", "pipeline",
+                      "end.to.end"],
         "skills": ["binder_design", "tool_scope", "fpocket"],
     },
 }
@@ -148,7 +148,7 @@ def build_dynamic_system_prompt(base_prompt: str, user_message: str) -> Tuple[st
     for name, content in loaded:
         if total_chars + len(content) > MAX_SKILL_CHARS:
             continue
-        sections.append(f"## [{name.upper()} 操作规程]\n\n{content}")
+        sections.append(f"## [{name.upper()} OPERATING PROCEDURE]\n\n{content}")
         total_chars += len(content)
         injected.append(name)
 
@@ -157,7 +157,7 @@ def build_dynamic_system_prompt(base_prompt: str, user_message: str) -> Tuple[st
         augmented = (
             base_prompt
             + "\n\n" + "=" * 60
-            + "\n# 当前任务操作规程（必须严格遵循）\n"
+            + "\n# CURRENT TASK OPERATING PROCEDURES (MUST FOLLOW STRICTLY)\n"
             + "=" * 60
             + "\n\n" + skill_block
         )

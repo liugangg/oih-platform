@@ -1,6 +1,6 @@
 """
 OIH Platform API Gateway
-统一接入层：让 Qwen3-14B 调用完整生物计算工具链
+Unified access layer: connects Qwen3-14B to the full bio-computing tool chain
 """
 
 from fastapi import FastAPI, Request
@@ -92,7 +92,7 @@ async def root():
 
 @app.get("/api/v1/tool_definitions")
 async def get_tool_definitions():
-    """返回 OpenAI Function Calling 格式的工具定义，供 Qwen3-14B 直接加载"""
+    """Return tool definitions in OpenAI Function Calling format for Qwen3-14B to load directly"""
     from tool_definitions.qwen_tools import ALL_TOOLS
     return {"tools": ALL_TOOLS, "count": len(ALL_TOOLS)}
 

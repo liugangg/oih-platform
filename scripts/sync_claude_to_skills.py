@@ -2,20 +2,20 @@
 """
 sync_claude_to_skills.py
 ========================
-CLAUDE.md → skills/*.md + routers/*.py + qwen_tools.py 单向同步
+CLAUDE.md -> skills/*.md + routers/*.py + qwen_tools.py one-way sync
 
-用法：
-    python scripts/sync_claude_to_skills.py          # dry-run（只看变更）
-    python scripts/sync_claude_to_skills.py --apply   # 真正写入
+Usage:
+    python scripts/sync_claude_to_skills.py          # dry-run (preview changes)
+    python scripts/sync_claude_to_skills.py --apply   # actually write files
 
-同步目标（5 处）：
-  1. skills/*.md          → Qwen 技能文档（keyword 注入 system prompt）
-  2. qwen_tools.py        → QWEN_SYSTEM_PROMPT 尾部注意事项
-  3. routers/*.py          → 每个 router 文件头部 # SYNC_NOTES 区块
-  4. CLAUDE.md             → 唯一编辑入口（只读不写）
-  5. qwen_agent.py         → 通过 skills_loader 间接同步（skill 文件更新即生效）
+Sync targets (5 locations):
+  1. skills/*.md          -> Qwen skill docs (keyword-injected into system prompt)
+  2. qwen_tools.py        -> QWEN_SYSTEM_PROMPT appended notes
+  3. routers/*.py          -> # SYNC_NOTES block at top of each router file
+  4. CLAUDE.md             -> single source of truth (read-only)
+  5. qwen_agent.py         -> indirectly synced via skills_loader (skill file updates take effect)
 
-踩了新坑 → 写 CLAUDE.md → python sync_claude_to_skills.py --apply → 重启 API → 全部同步完毕
+New pitfall found -> edit CLAUDE.md -> python sync_claude_to_skills.py --apply -> restart API -> all synced
 """
 
 import argparse
@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-# ─── 路径 ────────────────────────────────────────────────────────────────────
+# ─── Paths ───────────────────────────────────────────────────────────────────
 
 ROOT = Path(__file__).resolve().parent.parent          # /data/oih/oih-api
 CLAUDE_MD    = ROOT / "CLAUDE.md"
@@ -32,7 +32,7 @@ SKILLS_DIR   = ROOT / "skills"
 ROUTERS_DIR  = ROOT / "routers"
 QWEN_TOOLS   = ROOT / "tool_definitions" / "qwen_tools.py"
 
-# ─── 工具名 → skill 文件 ─────────────────────────────────────────────────────
+# ─── Tool name -> skill file ──────────────────────────────────────────────────
 
 TOOL_SKILL_MAP: Dict[str, str] = {
     "chemprop":    "CHEMPROP_WORKFLOW.md",
@@ -51,7 +51,7 @@ TOOL_SKILL_MAP: Dict[str, str] = {
     "rag":         "RAG_WORKFLOW.md",
 }
 
-# ─── 工具名 → router 文件 ────────────────────────────────────────────────────
+# ─── Tool name -> router file ─────────────────────────────────────────────────
 
 TOOL_ROUTER_MAP: Dict[str, str] = {
     "chemprop":    "ml_tools.py",
@@ -69,7 +69,7 @@ TOOL_ROUTER_MAP: Dict[str, str] = {
     "adc":         "adc.py",
 }
 
-# ─── 标题关键词 → 工具名 ─────────────────────────────────────────────────────
+# ─── Header keywords -> tool name ─────────────────────────────────────────────
 
 HEADER_KEYWORDS: Dict[str, List[str]] = {
     "chemprop":    ["chemprop", "admet"],
@@ -84,27 +84,27 @@ HEADER_KEYWORDS: Dict[str, List[str]] = {
     "fpocket":     ["fpocket", "p2rank", "pocket"],
     "gnina":       ["gnina"],
     "vina":        ["vina-gpu", "vina_gpu"],
-    "adc":         ["adc", "antibody drug conjugate", "偶联"],
-    "rag":         ["rag", "文献检索", "retrieval"],
+    "adc":         ["adc", "antibody drug conjugate", "conjugate"],
+    "rag":         ["rag", "literature search", "retrieval"],
 }
 
 GPU_TOOLS = {"gromacs", "alphafold3", "autodock", "rfdiffusion", "proteinmpnn",
              "bindcraft", "diffdock", "esm", "gnina"}
 
-# ─── 标记 ────────────────────────────────────────────────────────────────────
+# ─── Markers ─────────────────────────────────────────────────────────────────
 
 SYNC_MARKER_START = "<!-- AUTO_SYNC_FROM_CLAUDE_MD -->"
 SYNC_MARKER_END   = "<!-- /AUTO_SYNC_FROM_CLAUDE_MD -->"
-SYNC_SECTION_TITLE = "## ⚠️ 注意事项（自动同步自 CLAUDE.md）"
+SYNC_SECTION_TITLE = "## Notes (auto-synced from CLAUDE.md)"
 
-QWEN_MARKER_START = "# === 工具注意事项（自动同步自 CLAUDE.md） ==="
-QWEN_MARKER_END   = "# === /工具注意事项 ==="
+QWEN_MARKER_START = "# === Tool notes (auto-synced from CLAUDE.md) ==="
+QWEN_MARKER_END   = "# === /Tool notes ==="
 
 ROUTER_MARKER_START = "# --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---"
 ROUTER_MARKER_END   = "# --- /SYNC_NOTES ---"
 
 
-# ─── Step 1: 解析 CLAUDE.md ──────────────────────────────────────────────────
+# ─── Step 1: Parse CLAUDE.md ──────────────────────────────────────────────────
 
 def parse_claude_md(path: Path) -> Tuple[Dict[str, List[str]], List[str]]:
     text = path.read_text(encoding="utf-8")
@@ -157,9 +157,9 @@ def _match_tool(title: str) -> str | None:
 
 def _is_notes_section(title: str) -> bool:
     indicators = [
-        "注意", "规则", "坑", "修复", "critical", "pitfall", "bug",
-        "fix", "warning", "必须", "血泪", "workflow", "pipeline",
-        "preprocessing", "layout", "admet", "队列", "queue",
+        "note", "rule", "pitfall", "fix", "critical", "pitfall", "bug",
+        "fix", "warning", "must", "lesson", "workflow", "pipeline",
+        "preprocessing", "layout", "admet", "queue", "queue",
     ]
     return any(ind in title for ind in indicators)
 
@@ -181,14 +181,14 @@ def _clean_lines(lines: List[str]) -> List[str]:
         if stripped.startswith("#") or stripped.startswith("```"):
             continue
         actionable_keywords = [
-            "必须", "不要", "不能", "永远", "禁止", "避免", "切勿",
+            "must", "do not", "cannot", "always", "never", "avoid", "forbidden",
             "always", "never", "must", "critical", "warning", "avoid",
-            "注意", "重要", "danger", "device=0", "gpu_id",
+            "note", "important", "danger", "device=0", "gpu_id",
             "accelerator", "symlink", "python3.11", "noproxy",
-            "不要动", "不要混", "不要搞混", "kill", "restart",
-            "oom", "失败", "崩溃", "丢失", "broken", "tc-grps",
-            "nvt.gro", "npt.gro", "em.gro", "md.xtc", "验证",
-            "静默", "make_ndx", "protein_lig",
+            "do not touch", "do not mix", "do not confuse", "kill", "restart",
+            "oom", "fail", "crash", "lost", "broken", "tc-grps",
+            "nvt.gro", "npt.gro", "em.gro", "md.xtc", "verify",
+            "silent", "make_ndx", "protein_lig",
         ]
         has_keyword = any(k in stripped.lower() for k in actionable_keywords)
         if has_keyword:
@@ -196,7 +196,7 @@ def _clean_lines(lines: List[str]) -> List[str]:
     return result
 
 
-# ─── Step 2: 写入 skills/*.md ────────────────────────────────────────────────
+# ─── Step 2: Write to skills/*.md ─────────────────────────────────────────────
 
 def update_skill_file(skill_path: Path, notes: List[str], dry_run: bool) -> bool:
     if not skill_path.exists():
@@ -234,26 +234,26 @@ def update_skill_file(skill_path: Path, notes: List[str], dry_run: bool) -> bool
     return True
 
 
-# ─── Step 3: 写入 routers/*.py ───────────────────────────────────────────────
+# ─── Step 3: Write to routers/*.py ────────────────────────────────────────────
 
 def update_router_file(router_path: Path, tool_name: str,
                        notes: List[str], dry_run: bool) -> bool:
-    """在 router .py 文件顶部（import 之前）插入/替换 SYNC_NOTES 注释块。"""
+    """Insert/replace SYNC_NOTES comment block at top of router .py file (before imports)."""
     if not router_path.exists():
         return False
 
     text = router_path.read_text(encoding="utf-8")
 
-    # 构建注释块
+    # Build comment block
     comment_lines = [ROUTER_MARKER_START]
-    comment_lines.append(f"# {tool_name.upper()} 注意事项（来自 CLAUDE.md，勿手动编辑）：")
+    comment_lines.append(f"# {tool_name.upper()} notes (from CLAUDE.md, do not edit manually):")
     for note in notes:
-        # 去掉 markdown 格式，转成纯注释；确保单行安全
+        # Strip markdown formatting, convert to plain comment; ensure single-line safe
         clean = note.lstrip("-*> ").strip()
-        # 替换换行符、反斜杠n、反引号等可能破坏 Python 语法的字符
+        # Replace newlines, backslash-n, backticks that could break Python syntax
         clean = clean.replace("\\n", " ").replace("\n", " ")
         clean = clean.replace("'", "'").replace('"', '"')
-        clean = re.sub(r"\s+", " ", clean)  # 合并空白
+        clean = re.sub(r"\s+", " ", clean)  # collapse whitespace
         if clean:
             if len(clean) > 95:
                 clean = clean[:92] + "..."
@@ -268,7 +268,7 @@ def update_router_file(router_path: Path, tool_name: str,
         )
         new_text = pattern.sub(new_block, text)
     else:
-        # 插入在文件 docstring 之后、第一个 import 之前
+        # Insert after docstring, before first import
         import_match = re.search(r"^(import |from )", text, re.MULTILINE)
         if import_match:
             pos = import_match.start()
@@ -283,7 +283,7 @@ def update_router_file(router_path: Path, tool_name: str,
     return True
 
 
-# ─── Step 4: 更新 QWEN_SYSTEM_PROMPT ─────────────────────────────────────────
+# ─── Step 4: Update QWEN_SYSTEM_PROMPT ────────────────────────────────────────
 
 def update_qwen_system_prompt(
     tool_notes: Dict[str, List[str]],
@@ -295,13 +295,13 @@ def update_qwen_system_prompt(
     warning_lines = [QWEN_MARKER_START]
 
     if global_notes:
-        warning_lines.append("\n## 通用规则")
+        warning_lines.append("\n## General rules")
         for n in global_notes:
             warning_lines.append(f"- {n}" if not n.startswith("-") else n)
 
     for tool, notes in sorted(tool_notes.items()):
         if notes:
-            warning_lines.append(f"\n## {tool.upper()} 注意事项")
+            warning_lines.append(f"\n## {tool.upper()} notes")
             for n in notes:
                 warning_lines.append(f"- {n}" if not n.startswith("-") else n)
 
@@ -317,7 +317,7 @@ def update_qwen_system_prompt(
     else:
         idx = text.rfind('"""')
         if idx == -1:
-            print("[WARN] 找不到 QWEN_SYSTEM_PROMPT 结束位置", file=sys.stderr)
+            print("[WARN] Cannot find QWEN_SYSTEM_PROMPT closing position", file=sys.stderr)
             return False
         new_text = text[:idx] + "\n\n" + warning_block + "\n" + text[idx:]
 
@@ -332,38 +332,38 @@ def update_qwen_system_prompt(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CLAUDE.md → skills + routers + QWEN_SYSTEM_PROMPT 单向同步"
+        description="CLAUDE.md → skills + routers + QWEN_SYSTEM_PROMPT one-way sync"
     )
     parser.add_argument("--apply", action="store_true",
-                        help="实际写入文件（默认 dry-run 只显示变更）")
+                        help="Actually write files (default is dry-run, showing changes only)")
     args = parser.parse_args()
     dry_run = not args.apply
 
     if dry_run:
-        print("=== DRY RUN（不写入文件，加 --apply 生效）===\n")
+        print("=== DRY RUN (no files written; add --apply to execute) ===\n")
 
     if not CLAUDE_MD.exists():
-        print(f"[ERROR] {CLAUDE_MD} 不存在", file=sys.stderr)
+        print(f"[ERROR] {CLAUDE_MD} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    # 1. 解析
+    # 1. Parse
     tool_notes, global_notes = parse_claude_md(CLAUDE_MD)
 
-    print(f"[解析] 从 CLAUDE.md 提取到：")
-    print(f"  通用注意事项: {len(global_notes)} 条")
+    print(f"[Parse] Extracted from CLAUDE.md:")
+    print(f"  General notes: {len(global_notes)} items")
     for tool, notes in sorted(tool_notes.items()):
-        print(f"  {tool}: {len(notes)} 条")
+        print(f"  {tool}: {len(notes)} items")
 
-    # 2. 为 GPU 工具追加通用 GPU 规则
-    gpu_note = "容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）"
+    # 2. Append common GPU rules for GPU tools
+    gpu_note = "Inside the container NVIDIA_VISIBLE_DEVICES=1; always use device=0 / gpu_id=0 (do not use 1)"
     for tool in GPU_TOOLS:
         tool_notes.setdefault(tool, [])
         if not any("gpu_id" in n.lower() or "device=0" in n.lower()
                     for n in tool_notes[tool]):
             tool_notes[tool].insert(0, gpu_note)
 
-    # 3. 写入 skills
-    print(f"\n[同步 skills]")
+    # 3. Write to skills
+    print(f"\n[Sync skills]")
     skills_changed = 0
     for tool, notes in sorted(tool_notes.items()):
         skill_file = TOOL_SKILL_MAP.get(tool)
@@ -373,15 +373,15 @@ def main():
         if not skill_path.exists():
             continue
         changed = update_skill_file(skill_path, notes, dry_run)
-        status = "更新" if changed else "无变化"
-        print(f"  {tool} → {skill_file}: {status} ({len(notes)} 条)")
+        status = "updated" if changed else "no change"
+        print(f"  {tool} → {skill_file}: {status} ({len(notes)} items)")
         if changed:
             skills_changed += 1
 
-    # 4. 写入 routers
-    print(f"\n[同步 routers]")
+    # 4. Write to routers
+    print(f"\n[Sync routers]")
     routers_changed = 0
-    # 按 router 文件聚合多个工具的 notes
+    # Aggregate notes from multiple tools per router file
     router_aggregated: Dict[str, List[str]] = {}
     router_tools: Dict[str, List[str]] = {}
     for tool, notes in sorted(tool_notes.items()):
@@ -392,30 +392,30 @@ def main():
         router_tools.setdefault(router_file, [])
         router_tools[router_file].append(tool)
         for n in notes:
-            if n not in router_aggregated[router_file]:  # 去重
+            if n not in router_aggregated[router_file]:  # deduplicate
                 router_aggregated[router_file].append(n)
 
     for router_file, notes in sorted(router_aggregated.items()):
         router_path = ROUTERS_DIR / router_file
         tools_str = "+".join(router_tools.get(router_file, []))
         changed = update_router_file(router_path, tools_str, notes, dry_run)
-        status = "更新" if changed else "无变化"
-        print(f"  {tools_str} → {router_file}: {status} ({len(notes)} 条)")
+        status = "updated" if changed else "no change"
+        print(f"  {tools_str} → {router_file}: {status} ({len(notes)} entries)")
         if changed:
             routers_changed += 1
 
-    # 5. 写入 QWEN_SYSTEM_PROMPT
-    print(f"\n[同步 QWEN_SYSTEM_PROMPT]")
+    # 5. Write to QWEN_SYSTEM_PROMPT
+    print(f"\n[Sync QWEN_SYSTEM_PROMPT]")
     qwen_changed = update_qwen_system_prompt(tool_notes, global_notes, dry_run)
-    print(f"  qwen_tools.py: {'更新' if qwen_changed else '无变化'}")
+    print(f"  qwen_tools.py: {'updated' if qwen_changed else 'no change'}")
 
-    # 6. 汇总
+    # 6. Summary
     total = skills_changed + routers_changed + (1 if qwen_changed else 0)
     print(f"\n{'=' * 40}")
     if dry_run:
-        print(f"[DRY RUN] {total} 个文件将被修改。加 --apply 实际写入。")
+        print(f"[DRY RUN] {total} file(s) would be modified. Add --apply to write.")
     else:
-        print(f"[DONE] {total} 个文件已更新。重启 API 生效：")
+        print(f"[DONE] {total} file(s) updated. Restart API to take effect:")
         print(f"  kill $(pgrep -f 'uvicorn main:app') && \\")
         print(f"  cd /data/oih/oih-api && \\")
         print(f"  NO_PROXY='*' no_proxy='*' nohup /data/oih/miniconda/bin/python \\")

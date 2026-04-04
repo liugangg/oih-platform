@@ -3,9 +3,9 @@ Pocket Analysis Router
 Tools: Fpocket, P2Rank
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# FPOCKET 注意事项（来自 CLAUDE.md，勿手动编辑）：
-#   - 旧流程**（11步）：P2Rank top pocket → 直接取 top 6 残基 → DiffDock 盲对接交叉验证 → RFdiffusion
-#   - 10. AF3 验证 — ipTM ≥ 0.6
+# FPOCKET notes (from CLAUDE.md, do not manually edit):
+#   - Legacy workflow (11 steps): P2Rank top pocket → take top 6 residues → DiffDock blind docking cross-validation → RFdiffusion
+#   - 10. AF3 validation — ipTM >= 0.6
 # --- /SYNC_NOTES ---
 
 import os, json, re

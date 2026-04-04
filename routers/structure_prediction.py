@@ -3,14 +3,14 @@ Structure Prediction Router
 Tools: AlphaFold3
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# ALPHAFOLD3 注意事项（来自 CLAUDE.md，勿手动编辑）：
-#   - 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
-#   - 根因**：v3 任务 5 个 AF3 设计全部失败。rank1 超时 1800s（但实际已跑完，ipTM=0.48），rank2-5 被路由到 DEGRADED 队列 OOM exit 1
-#   - 修复 1**：新增 `_wait_for_af3_task()` 无限等待函数，每 30s poll，仅在 OOM/exit1/cancelled/连续10次同错 时判定失败
-#   - 不再降级到 DEGRADED 导致 OOM crash
-#   - 原因**：CIF→PDB 转换失败时 `af3_pdb=None` → `"No PDB for FreeSASA"` 错误
-#   - AF3 验证时按结构域截取抗原序列，避免全长序列降低ipTM精度
-#   - `num_seeds=3` 用于 binder_design_pipeline AF3 验证（速度/准确性平衡）
+# ALPHAFOLD3 notes (from CLAUDE.md, do not manually edit):
+#   - Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 / gpu_id=0 (not 1)
+#   - Root cause: v3 task had all 5 AF3 designs fail. rank1 timed out at 1800s (but actually finished, ipTM=0.48), rank2-5 routed to DEGRADED queue causing OOM exit 1
+#   - Fix 1: Added `_wait_for_af3_task()` unlimited wait function, polls every 30s, only fails on OOM/exit1/cancelled/10 consecutive same errors
+#   - No longer degrades to DEGRADED queue causing OOM crash
+#   - Cause: when CIF→PDB conversion fails, `af3_pdb=None` → `"No PDB for FreeSASA"` error
+#   - AF3 validation truncates antigen sequence by domain to avoid full-length sequences reducing ipTM accuracy
+#   - `num_seeds=3` used for binder_design_pipeline AF3 validation (speed/accuracy tradeoff)
 # --- /SYNC_NOTES ---
 
 import json

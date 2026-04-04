@@ -3,11 +3,11 @@ Protein Design Router
 Tools: RFdiffusion, ProteinMPNN, BindCraft, FreeSASA
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# BINDCRAFT+PROTEINMPNN+RFDIFFUSION 注意事项（来自 CLAUDE.md，勿手动编辑）：
-#   - 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
-#   - timeout 必须 7200s**（不是 3600s）
-#   - num_designs 用 10**（不要 20，太慢）
-#   - hotspot 必须空间聚集**（<= 15Å centroid），分散的会极慢
+# BINDCRAFT+PROTEINMPNN+RFDIFFUSION notes (from CLAUDE.md, do not manually edit):
+#   - Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 / gpu_id=0 (not 1)
+#   - Timeout must be 7200s (not 3600s)
+#   - num_designs use 10 (not 20, too slow)
+#   - Hotspots must be spatially clustered (<= 15A centroid); dispersed hotspots cause extreme slowness
 # --- /SYNC_NOTES ---
 
 import os

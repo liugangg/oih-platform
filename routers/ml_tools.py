@@ -2,15 +2,15 @@
 ML Tools Router - ESM & Chemprop
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# CHEMPROP+ESM 注意事项（来自 CLAUDE.md，勿手动编辑）：
-#   - 1. **Dockerfile 必须有**：`RUN ln -sf /usr/bin/python3.11 /usr/bin/python3`（容器内 python3 默认指向 3.1...
-#   - 2. **predict 调用必须加**：`--accelerator cpu`（小批量走 GPU 会 OOM），归属 `_CPU_TOOLS` 队列
-#   - 3. **`--devices 1` = "使用 1 个 GPU 设备"**，不是 device index=1。train 用 `--accelerator gpu --device...
-#   - 根因**：容器内 `python3` symlink 指向 3.10，但所有包（torch/numpy/chemprop）装在 python3.11 路径下 → `No module ...
-#   - 修复**：`docker exec oih-chemprop bash -c "rm /usr/bin/python3 && ln -s /usr/bin/python3.11 /us...
-#   - router 修复**：`routers/ml_tools.py` 加 `--accelerator cpu`，避免 GPU OOM；`task_manager.py` 把 `chem...
-#   - 验证**：3 分子预测 completed，CPU queue，5 秒完成
-#   - 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
+# CHEMPROP+ESM notes (from CLAUDE.md, do not manually edit):
+#   - 1. **Dockerfile must include**: `RUN ln -sf /usr/bin/python3.11 /usr/bin/python3` (container python3 defaults to 3.10)
+#   - 2. **predict calls must add**: `--accelerator cpu` (small batches on GPU cause OOM), assigned to `_CPU_TOOLS` queue
+#   - 3. **`--devices 1` = "use 1 GPU device"**, not device index=1. Train uses `--accelerator gpu --devices 1`
+#   - Root cause: container `python3` symlink points to 3.10, but all packages (torch/numpy/chemprop) installed under python3.11 path → `No module` errors
+#   - Fix: `docker exec oih-chemprop bash -c "rm /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3"`
+#   - Router fix: `routers/ml_tools.py` adds `--accelerator cpu` to avoid GPU OOM; `task_manager.py` assigns `chemprop_predict` to CPU queue
+#   - Verified: 3-molecule prediction completed, CPU queue, 5 seconds
+#   - Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 / gpu_id=0 (not 1)
 # --- /SYNC_NOTES ---
 
 import os, json

@@ -3,8 +3,8 @@ Molecular Docking Router
 Tools: Vina-GPU, AutoDock-GPU, GNINA, DiffDock
 """
 # --- SYNC_NOTES (auto-generated from CLAUDE.md, do not edit) ---
-# AUTODOCK+DIFFDOCK+GNINA 注意事项（来自 CLAUDE.md，勿手动编辑）：
-#   - 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
+# AUTODOCK+DIFFDOCK+GNINA notes (from CLAUDE.md, do not manually edit):
+#   - Container NVIDIA_VISIBLE_DEVICES=1, always use device=0 / gpu_id=0 (not 1)
 # --- /SYNC_NOTES ---
 
 import os, subprocess
@@ -176,7 +176,7 @@ async def run_vina_gpu(req: DockingRequest):
             settings.CONTAINER_VINA_GPU, req.ligand, req.job_name
         )
 
-        # 准备receptor pdbqt
+        # Prepare receptor pdbqt
         import asyncio as _aio
         rec_pdbqt_host = f"{settings.INPUT_DIR}/{req.job_name}/receptor.pdbqt"
         rec_proc = await _aio.create_subprocess_exec(
@@ -244,7 +244,7 @@ async def run_autodock_gpu(req: DockingRequest):
         sy = req.box_size_y or 25.0
         sz = req.box_size_z or 25.0
 
-        # Step1: prody清理PDB（容器内）
+        # Step1: Clean PDB with prody (in container)
         task.progress = 10
         task.progress_msg = "Step1: Cleaning PDB with prody..."
         prody_script = (
@@ -259,7 +259,7 @@ async def run_autodock_gpu(req: DockingRequest):
         if retcode != 0:
             raise RuntimeError(f"prody failed: {stderr[:300]}")
 
-        # Step2: obabel生成receptor.pdbqt（宿主机）
+        # Step2: Generate receptor.pdbqt with obabel (host machine)
         task.progress = 20
         task.progress_msg = "Step2: Generating receptor.pdbqt..."
         r = subprocess.run([
@@ -270,7 +270,7 @@ async def run_autodock_gpu(req: DockingRequest):
         if r.returncode != 0:
             raise RuntimeError(f"obabel receptor failed: {r.stderr[:300]}")
 
-        # Step3: 生成GPF文件（宿主机）
+        # Step3: Generate GPF file (host machine)
         task.progress = 30
         task.progress_msg = "Step3: Generating GPF..."
         npts_x = int(sx / 0.375)
@@ -299,7 +299,7 @@ async def run_autodock_gpu(req: DockingRequest):
         with open(f"{workdir}/receptor.gpf", "w") as f:
             f.write("\n".join(gpf_lines))
 
-        # Step4: autogrid4生成maps（宿主机）
+        # Step4: Run autogrid4 to generate maps (host machine)
         task.progress = 40
         task.progress_msg = "Step4: Running autogrid4..."
         r = subprocess.run(
@@ -308,7 +308,7 @@ async def run_autodock_gpu(req: DockingRequest):
         if r.returncode != 0:
             raise RuntimeError(f"autogrid4 failed: {r.stderr[:300]}")
 
-        # Step5: obabel生成ligand.pdbqt（宿主机）
+        # Step5: Generate ligand.pdbqt with obabel (host machine)
         task.progress = 50
         task.progress_msg = "Step5: Preparing ligand..."
         r = subprocess.run([
@@ -319,7 +319,7 @@ async def run_autodock_gpu(req: DockingRequest):
         if r.returncode != 0:
             raise RuntimeError(f"obabel ligand failed: {r.stderr[:300]}")
 
-        # Step6: autodock_gpu_128wi对接（容器内）
+        # Step6: Run autodock_gpu_128wi docking (in container)
         task.progress = 60
         task.progress_msg = "Step6: Running AutoDock-GPU..."
         dock_cmd = ["bash", "-c",

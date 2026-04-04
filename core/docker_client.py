@@ -1,6 +1,6 @@
 """
 Docker Client Wrapper
-在各工具容器内执行命令，统一GPU1资源调度
+Execute commands inside tool containers with unified GPU1 resource scheduling
 """
 import asyncio
 import json

@@ -1,17 +1,17 @@
-# ESM工作流文档
+# ESM Workflow Documentation
 
-## 基本信息
-- 容器：oih-esm
-- 模型：ESM2-650M (esm2_t33_650M_UR50D)
-- 模型路径：/root/.cache/torch/hub/checkpoints/
-- GPU：NVIDIA_VISIBLE_DEVICES=1 → 容器内cuda:0
+## Basic Information
+- Container: oih-esm
+- Model: ESM2-650M (esm2_t33_650M_UR50D)
+- Model path: /root/.cache/torch/hub/checkpoints/
+- GPU: NVIDIA_VISIBLE_DEVICES=1 → cuda:0 inside the container
 
-## 主要功能
-- ESM2：蛋白质序列嵌入提取（结构/功能预测下游任务）
-- ESM-1v：零样本变体效应预测
-- ESM-IF1：逆折叠（给定结构设计序列）
+## Main Functions
+- ESM2: protein sequence embedding extraction (for downstream structure/function prediction tasks)
+- ESM-1v: zero-shot variant effect prediction
+- ESM-IF1: inverse folding (design sequences given a structure)
 
-## 嵌入提取（Python API）
+## Embedding Extraction (Python API)
 ```python
 import torch
 import esm
@@ -31,12 +31,12 @@ embeddings = results['representations'][33]
 # shape: [batch, seq_len, 1280]
 ```
 
-## 输出说明
-- repr_layers=[33]：最后一层（第33层），1280维
-- embeddings[:,0,:]：[CLS] token，代表整条序列
-- embeddings[:,1:-1,:]：每个氨基酸残基的嵌入
+## Output Description
+- repr_layers=[33]: last layer (layer 33), 1280 dimensions
+- embeddings[:,0,:]: [CLS] token, represents the entire sequence
+- embeddings[:,1:-1,:]: per-residue embeddings for each amino acid
 
-## 命令行批量提取（FASTA）
+## Command-line Batch Extraction (FASTA)
 ```bash
 docker exec oih-esm bash -c "
 python3 /app/esm/scripts/extract.py \
@@ -47,15 +47,15 @@ python3 /app/esm/scripts/extract.py \
   --include mean per_tok"
 ```
 
-## 注意事项
-- 模型已缓存，无需重新下载
-- 长序列（>1000aa）显存占用较大，建议batch_size=1
-- 显存预估：650M模型约6GB（GPU1 45GB足够）
-- ESMFold需python<=3.9，当前环境不支持，用AlphaFold3代替结构预测
+## Notes
+- Model is cached; no re-download needed
+- Long sequences (>1000aa) require significant VRAM; batch_size=1 recommended
+- VRAM estimate: 650M model ~6GB (GPU1 45GB is sufficient)
+- ESMFold requires python<=3.9, not supported in the current environment; use AlphaFold3 for structure prediction instead
 
 <!-- AUTO_SYNC_FROM_CLAUDE_MD -->
-## ⚠️ 注意事项（自动同步自 CLAUDE.md）
+## Notes (auto-synced from CLAUDE.md)
 
-- 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
+- Inside the container NVIDIA_VISIBLE_DEVICES=1; always use device=0 / gpu_id=0 (do not use 1)
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->

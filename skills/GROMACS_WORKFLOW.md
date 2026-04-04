@@ -1,18 +1,18 @@
-# GROMACS MD模拟完整流程（已验证）
+# GROMACS MD Simulation Complete Workflow (Verified)
 
-## 环境信息
-- 容器名：oih-gromacs
-- 版本：GROMACS 2024.4
-- GPU命令：gmx mdrun -gpu_id 0（容器内永远用0）
-- 工作目录：/data/oih/outputs/test_gromacs/
+## Environment Information
+- Container name: oih-gromacs
+- Version: GROMACS 2024.4
+- GPU command: gmx mdrun -gpu_id 0 (always use 0 inside the container)
+- Working directory: /data/oih/outputs/test_gromacs/
 
-## ⚠️ GPU注意事项
-容器内 gpu_id 永远用 **0**，不能用 1。
-原因：NVIDIA_VISIBLE_DEVICES=1 已将宿主机GPU1映射为容器内GPU0。
+## ⚠️ GPU Notes
+Always use gpu_id **0** inside the container; never use 1.
+Reason: NVIDIA_VISIBLE_DEVICES=1 maps host GPU1 to container GPU0.
 
-## 完整8步流程
+## Complete 8-Step Workflow
 
-### 步骤1: pdb2gmx — 生成拓扑文件
+### Step 1: pdb2gmx — Generate Topology Files
 ```bash
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
@@ -23,11 +23,11 @@ echo '6' | gmx pdb2gmx \
   -ignh 2>&1 | tail -5
 "
 ```
-- `echo '6'` → 选择 AMBER99SB-ILDN 力场
-- `-ignh` → 忽略氢原子（自动添加）
-- 输出：protein.gro, topol.top, posre.itp
+- `echo '6'` → Select AMBER99SB-ILDN force field
+- `-ignh` → Ignore hydrogen atoms (automatically added)
+- Output: protein.gro, topol.top, posre.itp
 
-### 步骤2: editconf — 定义模拟盒子
+### Step 2: editconf — Define Simulation Box
 ```bash
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
@@ -35,10 +35,10 @@ gmx editconf -f protein.gro -o protein_box.gro \
   -c -d 1.0 -bt cubic 2>&1 | tail -3
 "
 ```
-- `-d 1.0` → 蛋白质距盒子边界1.0nm
-- `-bt cubic` → 立方体盒子
+- `-d 1.0` → 1.0 nm distance from protein to box boundary
+- `-bt cubic` → Cubic box
 
-### 步骤3: solvate — 加水
+### Step 3: solvate — Add Water
 ```bash
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
@@ -47,9 +47,9 @@ gmx solvate -cp protein_box.gro -cs spc216.gro \
 "
 ```
 
-### 步骤4: genion — 加离子（中和电荷）
+### Step 4: genion — Add Ions (Neutralize Charge)
 ```bash
-# 先生成 ions.tpr
+# First generate ions.tpr
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
 cat > ions.mdp << 'MDP'
@@ -68,10 +68,10 @@ echo 'SOL' | gmx genion -s ions.tpr -o protein_ions.gro \
   -p topol.top -pname NA -nname CL -neutral 2>&1 | tail -5
 "
 ```
-- `echo 'SOL'` → 选择溶剂组替换为离子
-- `-neutral` → 自动添加足够离子中和体系电荷
+- `echo 'SOL'` → Select solvent group to replace with ions
+- `-neutral` → Automatically add sufficient ions to neutralize the system charge
 
-### 步骤5: em — 能量最小化
+### Step 5: em — Energy Minimization
 ```bash
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
@@ -91,9 +91,9 @@ gmx grompp -f em.mdp -c protein_ions.gro -p topol.top -o em.tpr -maxwarn 2 2>&1 
 gmx mdrun -v -deffnm em -gpu_id 0 -nb gpu -ntmpi 1 -ntomp 16 2>&1 | tail -5
 "
 ```
-验证结果：2443步收敛，势能 -4.97×10⁶ kJ/mol，最大力 810 kJ/mol/nm < 1000阈值 ✅
+Verification: Converged in 2443 steps, potential energy -4.97×10⁶ kJ/mol, maximum force 810 kJ/mol/nm < 1000 threshold ✅
 
-### 步骤6: nvt — NVT平衡（控温，100ps）
+### Step 6: nvt — NVT Equilibration (Temperature Coupling, 100 ps)
 ```bash
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
@@ -127,9 +127,9 @@ gmx grompp -f nvt.mdp -c em.gro -r em.gro -p topol.top -o nvt.tpr -maxwarn 2 2>&
 gmx mdrun -v -deffnm nvt -gpu_id 0 -nb gpu -pme gpu -update gpu -ntmpi 1 -ntomp 16 2>&1 | tail -8
 "
 ```
-验证结果：性能 152 ns/day ✅
+Verification: Performance 152 ns/day ✅
 
-### 步骤7: npt — NPT平衡（控温控压，100ps）
+### Step 7: npt — NPT Equilibration (Temperature and Pressure Coupling, 100 ps)
 ```bash
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
@@ -164,9 +164,9 @@ gmx grompp -f npt.mdp -c nvt.gro -r nvt.gro -t nvt.cpt -p topol.top -o npt.tpr -
 gmx mdrun -v -deffnm npt -gpu_id 0 -nb gpu -pme gpu -update gpu -ntmpi 1 -ntomp 16 2>&1 | tail -8
 "
 ```
-验证结果：性能 162 ns/day ✅
+Verification: Performance 162 ns/day ✅
 
-### 步骤8: md — 正式MD模拟（1ns，可调）
+### Step 8: md — Production MD Simulation (1 ns, Adjustable)
 ```bash
 docker exec oih-gromacs bash -c "
 cd /data/oih/outputs/test_gromacs &&
@@ -202,71 +202,71 @@ gmx mdrun -v -deffnm md -gpu_id 0 -nb gpu -pme gpu -update gpu -ntmpi 1 -ntomp 1
 "
 ```
 
-## CPU降级命令（GPU不可用时）
+## CPU Fallback Command (When GPU Is Unavailable)
 ```bash
 gmx mdrun -v -deffnm md -nb cpu -pme cpu -ntmpi 1 -ntomp 32
 ```
 
-## 小分子MD（蛋白-配体复合物）
-纯蛋白MD不需要额外工具，但蛋白+小分子需要：
-1. acpype 生成小分子 GAFF2 力场参数（容器内未安装，需加入Dockerfile）
-2. 合并蛋白+配体 complex.pdb 再走正常流程
+## Small Molecule MD (Protein-Ligand Complex)
+Pure protein MD does not require additional tools, but protein + small molecule requires:
+1. acpype to generate small molecule GAFF2 force field parameters (not installed in the container; must be added to Dockerfile)
+2. Merge protein + ligand into complex.pdb, then follow the standard workflow
 
-安装acpype：在 Dockerfile 中加 `RUN pip install acpype`
+Install acpype: Add `RUN pip install acpype` to the Dockerfile
 
-## 注意事项
-- 力场选择：AMBER99SB-ILDN（序号6）适合蛋白质
-- 水模型：SPC/E（spce）
-- 1IVO.pdb 测试体系：1021个蛋白残基，89255个水分子，283376原子
+## Notes
+- Force field selection: AMBER99SB-ILDN (option 6) is suitable for proteins
+- Water model: SPC/E (spce)
+- 1IVO.pdb test system: 1021 protein residues, 89,255 water molecules, 283,376 atoms
 
-## 小分子MD（蛋白-配体复合物）完整流程（已验证）
+## Small Molecule MD (Protein-Ligand Complex) Complete Workflow (Verified)
 
-### 前置条件
-- 宿主机：obabel（/usr/bin/obabel）、acpype、AmberTools（tleap/parmchk2）
-- 配体输入：SDF格式（来自gnina/vina对接输出）
+### Prerequisites
+- Host machine: obabel (/usr/bin/obabel), acpype, AmberTools (tleap/parmchk2)
+- Ligand input: SDF format (from gnina/vina docking output)
 
-### 步骤0: 配体参数化（宿主机）
+### Step 0: Ligand Parameterization (Host Machine)
 ```bash
-# SDF第一个pose → mol2
+# First pose from SDF → mol2
 obabel <poses.sdf> -O ligand.mol2 -f 1 -l 1
 
-# mol2 → GAFF2力场参数（用gasteiger电荷，bcc需要量化计算）
+# mol2 → GAFF2 force field parameters (using Gasteiger charges; BCC requires quantum calculation)
 acpype -i ligand.mol2 -b LIG -c gas -a gaff2 -o gmx
-# 输出目录：LIG.acpype/
-# 关键文件：LIG_GMX.gro, LIG_GMX.itp, posre_LIG.itp
+# Output directory: LIG.acpype/
+# Key files: LIG_GMX.gro, LIG_GMX.itp, posre_LIG.itp
 ```
-⚠️ BCC电荷（-c bcc）需要sqm量化计算，较慢且可能失败；gasteiger（-c gas）足够用于MD。
+⚠️ BCC charges (-c bcc) require sqm quantum calculation, which is slow and may fail; Gasteiger (-c gas) is sufficient for MD.
 
-### 步骤1: 合并蛋白+配体复合物
+### Step 1: Merge Protein + Ligand Complex
 ```bash
-# 去掉protein.pdb的END行，拼接配体
+# Remove END line from protein.pdb, then append ligand
 grep -v "^END" protein.pdb > complex.pdb
-grep "^HETATM\|^ATOM" LIG.acpype/LIG_GMX.gro >> complex.pdb  # 或转换gro→pdb
+grep "^HETATM\|^ATOM" LIG.acpype/LIG_GMX.gro >> complex.pdb  # or convert gro→pdb
 echo "END" >> complex.pdb
 ```
 
-### 步骤2: 修改topol.top加入配体
+### Step 2: Modify topol.top to Include Ligand
 ```
-; 在topol.top末尾加入：
+; Add at the end of topol.top:
 #include "LIG.acpype/LIG_GMX.itp"
-; 在[ molecules ]中加入：
+; Add to [ molecules ] section:
 LIG    1
 ```
 
-### 步骤3: 走正常GROMACS 8步流程
-从pdb2gmx开始，force_field用AMBER99SB-ILDN（与GAFF2兼容）
+### Step 3: Follow Standard GROMACS 8-Step Workflow
+Start from pdb2gmx, using AMBER99SB-ILDN force field (compatible with GAFF2)
 
 <!-- AUTO_SYNC_FROM_CLAUDE_MD -->
-## ⚠️ 注意事项（自动同步自 CLAUDE.md）
+## ⚠️ Notes (Auto-synced from CLAUDE.md)
 
-- 容器内 NVIDIA_VISIBLE_DEVICES=1，永远用 device=0 / gpu_id=0（不要用1）
-- 1. **tc-grps 必须用 `Protein_LIG Water_and_ions`**（不是默认的 `Protein Non-Protein`），否则 NVT grompp 报 "group not found"
-- 2. **每步 mdrun 之后必须验证输出文件存在**：em.gro → nvt.gro → npt.gro → md.xtc，任何一步缺失立刻 raise 并附 .log 最后20行
-- 3. **`gmx make_ndx` 创建 Protein_LIG 组**：在 genion 之后、EM 之前运行 `echo '1 | 13
-q' | gmx make_ndx` 合并 Protein 和 LIG 组
-- 4. **不要静默忽略 mdrun 返回值**：`retcode != 0 and "WARNING" not in stderr` 这种判断不安全，WARNING 可能掩盖真实错误
-- 1. **tc-grps 动态检测**：`make_ndx` 后解析 `index.ndx` 找实际合并组名（如 `Protein_UNL`），不再硬编码 `Protein_LIG`
-- 2. **MDP 延迟生成**：NVT/NPT/MD 的 MDP 在 `_run()` 内 `make_ndx` 之后才写入，确保 tc-grps 正确
-- 3. **每步文件检查**：em.gro → nvt.gro → npt.gro → md.xtc，缺失立即 raise + 附 .log 最后 20 行
+- Inside the container NVIDIA_VISIBLE_DEVICES=1; always use device=0 / gpu_id=0 (never use 1)
+- 1. **tc-grps must use `Protein_LIG Water_and_ions`** (not the default `Protein Non-Protein`), otherwise NVT grompp reports "group not found"
+- 2. **Verify output files exist after each mdrun step**: em.gro → nvt.gro → npt.gro → md.xtc; if any step is missing, raise immediately and attach the last 20 lines of the .log
+- 3. **`gmx make_ndx` to create the Protein_LIG group**: Run `echo '1 | 13
+q' | gmx make_ndx` after genion and before EM to merge the Protein and LIG groups
+- 4. **Do not silently ignore mdrun return values**: The check `retcode != 0 and "WARNING" not in stderr` is unsafe; WARNING may mask real errors
+- 1. **Dynamic tc-grps detection**: After `make_ndx`, parse `index.ndx` to find the actual merged group name (e.g., `Protein_UNL`); do not hardcode `Protein_LIG`
+- 2. **Deferred MDP generation**: NVT/NPT/MD MDP files are written inside `_run()` after `make_ndx` to ensure tc-grps is correct
+- 3. **Per-step file check**: em.gro → nvt.gro → npt.gro → md.xtc; raise immediately if missing + attach last 20 lines of .log
 
 <!-- /AUTO_SYNC_FROM_CLAUDE_MD -->
