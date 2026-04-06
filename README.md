@@ -1,18 +1,26 @@
 # OIH — Open Intelligence Hub
 
-An LLM-agent platform for end-to-end computational antibody–drug conjugate (ADC) design.
+An autonomous LLM-agent platform for computational binder design and conjugation-aware prioritization of antibody–drug conjugates.
+
+![Architecture](docs/images/architecture.png)
 
 ## Overview
 
-OIH orchestrates 32 computational biology tools across 15 Docker containers using a large language model agent. Given a target protein name, the platform autonomously executes the complete binder design and ADC assembly pipeline — from hotspot identification through RFdiffusion backbone generation, ProteinMPNN sequence design, AlphaFold 3 validation, to final ADC conjugation.
+OIH orchestrates **32 computational biology tools** across **15 Docker containers** using a large language model agent. Given a target protein name, the platform autonomously executes the complete binder design and in silico ADC modelling pipeline — from hotspot identification through RFdiffusion backbone generation, ProteinMPNN sequence design, AlphaFold 3 validation, to final ADC conjugation.
 
 ## Architecture
+
+![Tool Ecosystem](docs/images/tool_grid.png)
 
 - **LLM Agent**: LLM-agnostic backend — swap between local and cloud LLMs without changing any pipeline logic
 - **Tool Orchestration**: Multi-round function calling with dynamic skills injection (26 workflow documents)
 - **Tier Routing**: Structure-guided (Tier 1) and prediction-guided (Tier 2) hotspot selection
-- **Validation**: AlphaFold 3 + ipSAE quality control
+- **Validation**: AlphaFold 3 + ipSAE interface quality filtering
 - **ADC Assembly**: Automated conjugation site selection (FreeSASA) and linker chemistry (RDKit)
+
+## Pipeline
+
+![Pipeline](docs/images/pipeline.png)
 
 ## Tool Inventory
 
@@ -120,10 +128,22 @@ response = await llm.chat(messages, tools=tools)
 - **CPU**: 16+ cores recommended
 - **RAM**: 64GB+ recommended
 
+## Key Results
+
+Across five oncology-relevant targets:
+
+| Target | ipTM | ipSAE | In silico conjugation |
+|--------|------|-------|----------------------|
+| Nectin-4 | 0.87 | 0.68 | Modelled |
+| HER2 | 0.85 | 0.53 | Modelled |
+| EGFR | 0.52 | 0.19 | Modelled |
+| CD36 | 0.58 | 0.056 | — |
+| TROP2 | 0.22 | 0.000 | — |
+
 ## Citation
 
 If you use OIH in your research, please cite:
-> [Paper reference to be added upon publication]
+> Liu, G. et al. An autonomous LLM-agent platform for computational binder design and conjugation-aware prioritization of antibody–drug conjugates. *Nature Communications* (under review, 2026).
 
 ## License
 
