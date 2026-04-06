@@ -8,6 +8,10 @@ An autonomous LLM-agent platform for computational binder design and conjugation
 
 OIH orchestrates **32 computational biology tools** across **15 Docker containers** using a large language model agent. Given a target protein name, the platform autonomously executes the complete binder design and in silico ADC modelling pipeline — from hotspot identification through RFdiffusion backbone generation, ProteinMPNN sequence design, AlphaFold 3 validation, to final ADC conjugation.
 
+![Dashboard](docs/images/dashboard_1.png)
+
+![Dashboard — task view](docs/images/dashboard_2.png)
+
 ## Architecture
 
 ![Tool Ecosystem](docs/images/tool_grid.png)
