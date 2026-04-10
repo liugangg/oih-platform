@@ -147,8 +147,7 @@ Across five oncology-relevant targets:
 ## Citation
 
 If you use OIH in your research, please cite:
-> Liu, G. et al. An autonomous LLM-agent platform for computational binder design and conjugation-aware prioritization of antibody–drug conjugates. *Nature Communications* (under review, 2026).
-
+> - **Liu, G.** et al. An autonomous LLM-agent platform for computational binder design and conjugation-aware prioritization of antibody–drug conjugates. *Nature Machine Intelligence* (under review, 2026）
 ## License
 
 MIT License
