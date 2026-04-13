@@ -45,7 +45,7 @@ The agent is **LLM-agnostic**: it works with local open-weight models (Qwen3-14B
 | GPU 1 (compute) | 24 GB VRAM | 48 GB (A6000 / dual-4090) |
 | CPU | 8 cores | 16+ cores |
 | RAM | 32 GB | 64 GB+ |
-| Storage | 200 GB | 500 GB (includes AF3 databases) |
+| Storage | 500 GB | 2 TB (includes AF3 databases) |
 
 A single GPU setup is possible by time-sharing between LLM and compute, though this reduces throughput.
 
