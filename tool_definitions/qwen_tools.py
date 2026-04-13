@@ -5,7 +5,7 @@ Tells the LLM which tools are available and how to call them
 """
 
 import os as _os
-API_BASE = f"http://{_os.environ.get('OIH_SERVER_HOST', 'localhost')}:8000/api/v1"
+API_BASE = f"http://{_os.environ.get('OIH_SERVER_HOST', 'localhost')}:8080/api/v1"
 
 ALL_TOOLS = [
 

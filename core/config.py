@@ -10,7 +10,7 @@ from pathlib import Path
 class Settings(BaseSettings):
     # Server
     SERVER_HOST: str = os.environ.get("OIH_SERVER_HOST", "localhost")
-    API_PORT: int = 8000
+    API_PORT: int = 8080
 
     # GPU Assignment
     QWEN_GPU: str = "0"       # GPU0 → Qwen3-14B
