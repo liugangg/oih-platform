@@ -123,7 +123,7 @@ body{margin:0;background:#0f1117;color:#e2e8f0;font-family:'IBM Plex Mono',monos
 <!-- ─── React App ───────────────────────────────────────────────────────── -->
 <script type="text/babel">
 const {useState,useEffect,useRef,useCallback,useMemo}=React;
-const API="http://192.168.31.23:8080";
+const API=window.location.origin;
 
 /* ── constants ────────────────────────────────────────────────────────────── */
 const EXAMPLES=[
@@ -2392,7 +2392,7 @@ function App(){
           <span className="flex-1"/>
           <span className="text-[#94a3b8]">Containers: {Object.values(health.containers||{}).filter(v=>v==='running').length}/{Object.keys(health.containers||{}).length}</span>
         </>}
-        <span className="text-[#94a3b8]">192.168.31.23 | Qwen3-14B + 18 Tools</span>
+        <span className="text-[#94a3b8]">OIH Platform | LLM Agent + 32 Tools</span>
       </footer>
       <ExportReportModal show={showReport} onClose={()=>setShowReport(false)}/>
     </div>

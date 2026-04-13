@@ -1,12 +1,9 @@
 # OIH Platform Overview & Key Rules
 
-## Server Information
-- IP: 192.168.31.23
-- CPU: AMD EPYC 7763, 128 threads
-- RAM: 251GB (230GB available)
-- GPU0: RTX 4090 24GB → Dedicated to Qwen2.5/Qwen3 inference (vLLM)
-- GPU1: RTX 4090 45GB → All bioinformatics computation tools
-- Ports: FastAPI=8080, vLLM=8002, Nginx=8000
+## Server Requirements
+- GPU0: 24GB+ VRAM → Dedicated to LLM inference (vLLM)
+- GPU1: 24GB+ VRAM (48GB recommended) → All bioinformatics computation tools
+- Ports: FastAPI=8080, vLLM=8002
 
 ## GPU Mapping Key Rule
 **All computation containers must always use gpu_id=0 / device=0**
