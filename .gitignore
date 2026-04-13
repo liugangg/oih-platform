@@ -16,6 +16,11 @@ data/*.db
 outputs/
 *.log
 
+# Internal planning / progress notes
+docs/PENDING_RESULTS.md
+docs/PAPER_FIGURES_AND_TABLES.md
+data/pocket_scoring_log.jsonl
+
 # Development
 venv/
 node_modules/
