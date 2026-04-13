@@ -4,7 +4,15 @@ message: "If you use this software, please cite our paper."
 type: software
 authors:
   - family-names: Liu
-    given-names: Gang
+    given-names: Ganggang
+  - family-names: He
+    given-names: Mingjie
+  - family-names: Sun
+    given-names: Liang
+  - family-names: Chen
+    given-names: Fuxian
+  - family-names: Zhang
+    given-names: Yu
 license: MIT
 repository-code: https://github.com/liugangg/oih-platform
 keywords:
@@ -17,8 +25,16 @@ preferred-citation:
   type: article
   authors:
     - family-names: Liu
-      given-names: Gang
+      given-names: Ganggang
+    - family-names: He
+      given-names: Mingjie
+    - family-names: Sun
+      given-names: Liang
+    - family-names: Chen
+      given-names: Fuxian
+    - family-names: Zhang
+      given-names: Yu
   title: "An autonomous LLM-agent platform for computational binder design and conjugation-aware prioritization of antibody-drug conjugates"
   journal: Nature Machine Intelligence
   year: 2026
-  status: under-review
+  status: submitted

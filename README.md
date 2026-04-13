@@ -145,6 +145,19 @@ All tools are accessible both through the LLM agent (natural language) and direc
 
 Full API documentation is available at `/docs` (Swagger UI) once the server is running.
 
+## Reproducibility
+
+OIH uses a two-tier target classification system as described in the accompanying manuscript (Liu et al., Nature Machine Intelligence, 2026):
+
+- **Tier 1** targets have known antibody co-crystal structures (e.g., HER2/trastuzumab 1N8Z, EGFR/cetuximab 1YY9). The pipeline extracts interface residues directly from the complex as design hotspots. This evaluates the platform's *execution capability*.
+- **Tier 2** targets lack co-crystal structures (e.g., Nectin-4, CD36, TROP2). The pipeline uses PeSTo PPI interface prediction to identify hotspots *de novo*. This evaluates the platform's *discovery capability*.
+
+Expert prior knowledge (PDB IDs, domain boundaries, known ligand chains) is stored in `config/target_registry.json` as an explicit configuration module. The LLM agent consults this registry during tier classification but does not receive the final binder design answer — it must still orchestrate the full RFdiffusion → ProteinMPNN → AlphaFold 3 → ipSAE pipeline autonomously.
+
+To reproduce results on a new target not in the registry, provide only a PDB ID or UniProt accession. The agent will classify it as Tier 2 and use PeSTo for hotspot discovery.
+
+All 36 post-fix designs reported in the paper, along with full tool schemas and prompt templates, are available in this repository.
+
 ## Key Results
 
 Autonomous binder design and in silico ADC assembly across five oncology targets:
@@ -214,10 +227,10 @@ If you use OIH in your research, please cite:
 @article{liu2026oih,
   title={An autonomous LLM-agent platform for computational binder design
          and conjugation-aware prioritization of antibody--drug conjugates},
-  author={Liu, Gang},
+  author={Liu, Ganggang and He, Mingjie and Sun, Liang and Chen, Fuxian and Zhang, Yu},
   journal={Nature Machine Intelligence},
   year={2026},
-  note={Under review}
+  note={Submitted}
 }
 ```
 ## License
