@@ -1,3 +1,4 @@
+# ── Core API ──────────────────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
 pydantic==2.8.0
@@ -5,3 +6,27 @@ pydantic-settings==2.4.0
 httpx==0.27.0
 python-multipart==0.0.9
 aiofiles==24.1.0
+
+# ── Structural biology ───────────────────────────────────────────────
+gemmi>=0.6.4
+biopython>=1.82
+pdbfixer>=1.9                # requires openmm (conda install recommended)
+
+# ── Chemistry ────────────────────────────────────────────────────────
+rdkit>=2023.09.0             # conda install -c conda-forge rdkit
+freesasa>=2.2.0
+
+# ── Scientific computing ─────────────────────────────────────────────
+numpy>=1.24.0
+scipy>=1.11.0
+pandas>=2.0.0
+matplotlib>=3.8.0
+
+# ── Authentication (optional — only needed for multi-user mode) ──────
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# ── RAG / literature retrieval (optional) ─────────────────────────────
+# chromadb>=0.5.0
+# sentence-transformers>=3.0.0
+# Set OIH_LOCAL_DB=true and OIH_CHROMA_PATH to enable local vector store

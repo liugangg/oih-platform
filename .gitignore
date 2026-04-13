@@ -1,12 +1,22 @@
 __pycache__/
 *.pyc
+*.pyo
 .env
+.env.*
+
+# Internal dev artifacts — not part of the released software
+CLAUDE.md
+.claude/
+
+# Runtime data
 data/distillation/
 data/tasks/
 data/linker_library.json
-.claude/
+data/*.db
 outputs/
 *.log
+
+# Development
 venv/
 node_modules/
 backups/
@@ -16,3 +26,5 @@ docs/*-maintenance.md
 *.finetuned
 *.bak
 *.bak.*
+*.swp
+*~

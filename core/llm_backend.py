@@ -177,13 +177,17 @@ class OpenAIBackend(LLMBackend):
 
 def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
     """Factory function to create LLM backend.
-    
+
+    Accepts a *universal* kwargs set from callers (provider, api_key, model,
+    base_url, vllm_url, vllm_model) and translates them to each backend's
+    actual __init__ signature, dropping unknown / None values.
+
     Args:
         provider: "local" | "anthropic" | "openai"
-        **kwargs: Backend-specific configuration
-    
+        **kwargs: any of api_key, model, base_url, vllm_url, vllm_model
+
     Returns:
-        LLMBackend instance
+        LLMBackend instance with `.provider` attribute set.
     """
     backends = {
         "local": LocalVLLM,
@@ -192,4 +196,28 @@ def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
     }
     if provider not in backends:
         raise ValueError(f"Unknown provider: {provider}. Choose from {list(backends.keys())}")
-    return backends[provider](**kwargs)
+
+    # Translate universal kwargs → per-backend signature
+    if provider == "local":
+        instance_kwargs = {
+            "base_url": kwargs.get("vllm_url") or kwargs.get("base_url"),
+            "model":    kwargs.get("vllm_model") or kwargs.get("model"),
+        }
+    elif provider == "anthropic":
+        instance_kwargs = {
+            "api_key": kwargs.get("api_key"),
+            "model":   kwargs.get("model"),
+        }
+    elif provider == "openai":
+        instance_kwargs = {
+            "api_key":  kwargs.get("api_key"),
+            "base_url": kwargs.get("base_url"),
+            "model":    kwargs.get("model"),
+        }
+
+    # Drop None so backend defaults apply
+    instance_kwargs = {k: v for k, v in instance_kwargs.items() if v is not None}
+
+    instance = backends[provider](**instance_kwargs)
+    instance.provider = provider  # qwen_agent expects backend.provider
+    return instance

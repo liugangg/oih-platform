@@ -24,14 +24,18 @@ from routers import (
     analysis,
     immunology,
     report,
+    auth_router,
 )
 from core.task_manager import task_manager
 from core.config import settings
 from qwen_agent import agent_router
 import sys
-sys.path.insert(0, "/data/oih")
+from pathlib import Path
+
+_data_root = Path(settings.DATA_ROOT)  # default /data/oih, configurable
+sys.path.insert(0, str(_data_root))
 from retrieval.rag_router import rag_router
-sys.path.insert(0, '/data/oih/oih-skills')
+sys.path.insert(0, str(_data_root / "oih-skills"))
 from _loader.skills_loader import get_registry
 
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +55,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(auth_router.UserContextMiddleware)
 
 # Register all routers
 app.include_router(structure_prediction.router, prefix="/api/v1/structure",    tags=["Structure Prediction"])
@@ -68,6 +73,7 @@ app.include_router(immunology.router,          prefix="/api/v1/immunology",   ta
 app.include_router(agent_router,               prefix="/api/v1/agent",        tags=["AI Agent"])
 app.include_router(rag_router,                 prefix="/api/v1/rag",          tags=["Literature RAG"])
 app.include_router(report.router,              prefix="/api/v1/report",       tags=["Report Generation"])
+app.include_router(auth_router.router,                                         tags=["Authentication"])
 
 # Serve output files (PDB/CIF/SDF etc.) for dashboard 3D viewer
 app.mount("/outputs", StaticFiles(directory="/data/oih/outputs"), name="outputs")

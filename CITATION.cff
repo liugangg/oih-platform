@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "OIH: An Autonomous LLM-Agent Platform for Computational Binder Design and ADC Prioritization"
+message: "If you use this software, please cite our paper."
+type: software
+authors:
+  - family-names: Liu
+    given-names: Gang
+license: MIT
+repository-code: https://github.com/liugangg/oih-platform
+keywords:
+  - drug-discovery
+  - llm-agent
+  - antibody-drug-conjugate
+  - protein-design
+  - computational-biology
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Liu
+      given-names: Gang
+  title: "An autonomous LLM-agent platform for computational binder design and conjugation-aware prioritization of antibody-drug conjugates"
+  journal: Nature Machine Intelligence
+  year: 2026
+  status: under-review
