@@ -1,0 +1,195 @@
+{
+  "_comment": "Expert prior knowledge module. Tier 1 targets use known co-crystal interfaces; Tier 2 targets use PeSTo PPI prediction. See Methods section of Liu et al., Nature Machine Intelligence (2026).",
+  "targets": {
+    "HER2": {
+      "aliases": ["ERBB2"],
+      "pdb": "1N8Z",
+      "tier": 1,
+      "receptor_chain": "C",
+      "ligand_chains": ["A", "B"],
+      "source": "trastuzumab",
+      "uniprot": "P04626",
+      "signal_peptide_offset": 22,
+      "domain_registry": {
+        "domain2": {
+          "range": [172, 308],
+          "hotspot_center": 240,
+          "description": "Dimerization arm, pertuzumab epitope"
+        },
+        "domain4": {
+          "range": [488, 630],
+          "hotspot_center": 565,
+          "description": "Trastuzumab epitope, C558-C573"
+        }
+      },
+      "notes": "Trastuzumab co-crystal, C(581aa) vs A(214)+B(220) Fab"
+    },
+    "EGFR": {
+      "aliases": [],
+      "pdb": "1YY9",
+      "tier": 1,
+      "receptor_chain": "A",
+      "ligand_chains": ["C", "D"],
+      "source": "cetuximab",
+      "uniprot": "P00533",
+      "signal_peptide_offset": 24,
+      "domain_registry": {
+        "domain1": {
+          "range": [25, 189],
+          "hotspot_center": 100,
+          "description": "Ligand binding domain I"
+        },
+        "domain3": {
+          "range": [361, 481],
+          "hotspot_center": 420,
+          "description": "Ligand binding domain III, cetuximab epitope"
+        }
+      },
+      "notes": "Cetuximab co-crystal, A(613aa) vs C(211)+D(220) Fab"
+    },
+    "PDL1": {
+      "aliases": ["PD-L1"],
+      "pdb": "4ZQK",
+      "tier": 1,
+      "receptor_chain": "A",
+      "ligand_chains": ["H", "L"],
+      "source": "atezolizumab",
+      "uniprot": "Q9NZQ7",
+      "signal_peptide_offset": 18,
+      "domain_registry": {
+        "ig_v_domain": {
+          "range": [19, 127],
+          "hotspot_center": 73,
+          "description": "IgV domain, PD-1 binding interface"
+        }
+      },
+      "notes": "PD-1 co-crystal"
+    },
+    "VEGF": {
+      "aliases": [],
+      "pdb": "1BJ1",
+      "tier": 1,
+      "receptor_chain": "V",
+      "ligand_chains": ["H", "L"],
+      "source": "bevacizumab",
+      "uniprot": null,
+      "signal_peptide_offset": 0,
+      "domain_registry": {},
+      "notes": "Bevacizumab co-crystal, V(94aa) vs H(218)+L(213) Fab"
+    },
+    "TNF": {
+      "aliases": [],
+      "pdb": "3WD5",
+      "tier": 1,
+      "receptor_chain": "A",
+      "ligand_chains": ["H", "L"],
+      "source": "adalimumab",
+      "uniprot": null,
+      "signal_peptide_offset": 0,
+      "domain_registry": {},
+      "notes": "Adalimumab co-crystal, A(152aa) vs H(214)+L(213) Fab"
+    },
+    "NECTIN4": {
+      "aliases": ["NECTIN-4"],
+      "pdb": "4GJT",
+      "tier": 2,
+      "receptor_chain": null,
+      "ligand_chains": ["B"],
+      "source": null,
+      "uniprot": "Q96NY8",
+      "signal_peptide_offset": 0,
+      "domain_registry": {
+        "d1_d2": {
+          "range": [32, 240],
+          "hotspot_center": 212,
+          "description": "Ig-like D1+D2 domains, PeSTo L208/R212/Y214 (score 0.95-0.97)"
+        }
+      },
+      "notes": "MV-H complex, PeSTo PPI"
+    },
+    "CD36": {
+      "aliases": [],
+      "pdb": "5LGD",
+      "tier": 2,
+      "receptor_chain": null,
+      "ligand_chains": null,
+      "source": null,
+      "uniprot": "P16671",
+      "signal_peptide_offset": 0,
+      "domain_registry": {
+        "pesto_ppi_core": {
+          "range": [140, 240],
+          "hotspot_center": 191,
+          "description": "PeSTo PPI interface core (L187-P193, score 0.50-0.87) + buffer"
+        },
+        "clesh_domain": {
+          "range": [50, 180],
+          "hotspot_center": 106,
+          "description": "CLESH domain (TSP-1 binding, E101/D106/E108/D109, mutagenesis validated)"
+        },
+        "extracellular_full": {
+          "range": [30, 439],
+          "hotspot_center": 200,
+          "description": "Full extracellular domain (fallback only)"
+        }
+      },
+      "notes": "No antibody co-crystal, PeSTo PPI"
+    },
+    "TROP2": {
+      "aliases": [],
+      "pdb": "7PEE",
+      "tier": 2,
+      "receptor_chain": null,
+      "ligand_chains": null,
+      "source": null,
+      "uniprot": "P09758",
+      "signal_peptide_offset": 0,
+      "domain_registry": {
+        "ectodomain": {
+          "range": [30, 274],
+          "hotspot_center": 150,
+          "description": "Full ectodomain (PeSTo max=0.42, flat surface)"
+        }
+      },
+      "notes": "Apo structure, PeSTo PPI"
+    },
+    "TRKA": {
+      "aliases": [],
+      "pdb": "1HE7",
+      "tier": 2,
+      "receptor_chain": null,
+      "ligand_chains": ["X"],
+      "source": null,
+      "uniprot": "P04629",
+      "signal_peptide_offset": 0,
+      "domain_registry": {
+        "d5_domain": {
+          "range": [280, 400],
+          "hotspot_center": 302,
+          "description": "NGF binding D5 domain, PeSTo P302/C300/S304 (score 0.999)"
+        },
+        "ectodomain": {
+          "range": [34, 423],
+          "hotspot_center": 300,
+          "description": "Full ECD (fallback)"
+        }
+      },
+      "notes": "NGF complex, PeSTo PPI"
+    }
+  },
+  "pdb_aliases": {
+    "_comment": "Quick lookup: target name -> PDB ID, used by agent fast-route detection",
+    "her2": "1N8Z", "erbb2": "1N8Z",
+    "pd-l1": "5XXY", "pdl1": "5XXY", "pdl-1": "5XXY",
+    "egfr": "1YY9",
+    "vegf": "1BJ1",
+    "tnf": "3WD5",
+    "cd36": "5LGD",
+    "nectin-4": "4GJT", "nectin4": "4GJT",
+    "trop2": "7PEE",
+    "trka": "1HE7",
+    "cox-2": "5XWR", "cox2": "5XWR",
+    "bcl-2": "6O0K", "bcl2": "6O0K",
+    "tp53": "2XWR", "p53": "2XWR"
+  }
+}

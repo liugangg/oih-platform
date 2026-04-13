@@ -3,6 +3,7 @@ Full Pipeline Router
 Orchestrates multi-tool workflows that Qwen can trigger as single calls
 """
 import asyncio, json, os, re
+from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from schemas.models import (
@@ -26,138 +27,41 @@ router = APIRouter()
 
 # ============================================================
 # AF3 Antigen Domain Registry
-# Literature-based: sequence truncation preserves complete domains, avoids disrupting disulfide bonds and folding units
-# Principles:
-#   1. Truncate by UniProt/Pfam domain boundaries, not by residue count
-#   2. Multiple druggable domains → run AF3 separately for each, validate independently
-#   3. Unknown proteins → use hotspot residues to locate domain boundaries
-#   4. padding=30aa preserves boundary flexible regions
+# Loaded from config/target_registry.json — expert prior knowledge module.
+# Tier 1: known antibody co-crystal → extract interface residues as hotspots.
+# Tier 2: PeSTo PPI prediction → de novo hotspot discovery.
 # Reference: Yin et al. Protein Science 2024; PMC12360200 (AF3 nanobody benchmark)
 # ============================================================
 
-DOMAIN_REGISTRY = {
-    # HER2 / ERBB2 (UniProt P04626)
-    "HER2": {
-        "uniprot": "P04626",
-        "signal_peptide_offset": 22,
-        "druggable_domains": [
-            {
-                "name": "domain2",
-                "range": (172, 308),
-                "hotspot_center": 240,
-                "description": "Dimerization arm, pertuzumab epitope",
-            },
-            {
-                "name": "domain4",
-                "range": (488, 630),
-                "hotspot_center": 565,
-                "description": "Trastuzumab epitope, C558-C573",
-            },
-        ],
-    },
-    # CD36 (UniProt P16671) — 3 sub-domains for targeted AF3
-    "CD36": {
-        "uniprot": "P16671",
-        "signal_peptide_offset": 0,
-        "druggable_domains": [
-            {
-                "name": "pesto_ppi_core",
-                "range": (140, 240),
-                "hotspot_center": 191,
-                "description": "PeSTo PPI interface core (L187-P193, score 0.50-0.87) + buffer",
-            },
-            {
-                "name": "clesh_domain",
-                "range": (50, 180),
-                "hotspot_center": 106,
-                "description": "CLESH domain (TSP-1 binding, E101/D106/E108/D109, mutagenesis validated)",
-            },
-            {
-                "name": "extracellular_full",
-                "range": (30, 439),
-                "hotspot_center": 200,
-                "description": "Full extracellular domain (fallback only)",
-            },
-        ],
-    },
-    # EGFR (UniProt P00533)
-    "EGFR": {
-        "uniprot": "P00533",
-        "signal_peptide_offset": 24,
-        "druggable_domains": [
-            {
-                "name": "domain1",
-                "range": (25, 189),
-                "hotspot_center": 100,
-                "description": "Ligand binding domain I",
-            },
-            {
-                "name": "domain3",
-                "range": (361, 481),
-                "hotspot_center": 420,
-                "description": "Ligand binding domain III, cetuximab epitope",
-            },
-        ],
-    },
-    # PD-L1 (UniProt Q9NZQ7)
-    "PDL1": {
-        "uniprot": "Q9NZQ7",
-        "signal_peptide_offset": 18,
-        "druggable_domains": [
-            {
-                "name": "ig_v_domain",
-                "range": (19, 127),
-                "hotspot_center": 73,
-                "description": "IgV domain, PD-1 binding interface",
-            },
-        ],
-    },
-    # Nectin-4 (UniProt Q96NY8)
-    "NECTIN4": {
-        "uniprot": "Q96NY8",
-        "signal_peptide_offset": 0,
-        "druggable_domains": [
-            {
-                "name": "d1_d2",
-                "range": (32, 240),
-                "hotspot_center": 212,
-                "description": "Ig-like D1+D2 domains, PeSTo L208/R212/Y214 (score 0.95-0.97)",
-            },
-        ],
-    },
-    # TROP2 (UniProt P09758)
-    "TROP2": {
-        "uniprot": "P09758",
-        "signal_peptide_offset": 0,
-        "druggable_domains": [
-            {
-                "name": "ectodomain",
-                "range": (30, 274),
-                "hotspot_center": 150,
-                "description": "Full ectodomain (PeSTo max=0.42, flat surface — difficult target)",
-            },
-        ],
-    },
-    # TrkA (UniProt P04629)
-    "TRKA": {
-        "uniprot": "P04629",
-        "signal_peptide_offset": 0,
-        "druggable_domains": [
-            {
-                "name": "d5_domain",
-                "range": (280, 400),
-                "hotspot_center": 302,
-                "description": "NGF binding D5 domain, PeSTo P302/C300/S304 (score 0.999)",
-            },
-            {
-                "name": "ectodomain",
-                "range": (34, 423),
-                "hotspot_center": 300,
-                "description": "Full ECD (fallback)",
-            },
-        ],
-    },
-}
+_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "config" / "target_registry.json"
+with open(_REGISTRY_PATH) as _f:
+    _TARGET_REGISTRY = json.load(_f)
+
+
+def _build_domain_registry() -> dict:
+    """Convert JSON target_registry into the internal DOMAIN_REGISTRY format."""
+    reg = {}
+    for name, entry in _TARGET_REGISTRY["targets"].items():
+        domains = entry.get("domain_registry", {})
+        if not domains:
+            continue
+        reg[name] = {
+            "uniprot": entry.get("uniprot"),
+            "signal_peptide_offset": entry.get("signal_peptide_offset", 0),
+            "druggable_domains": [
+                {
+                    "name": dname,
+                    "range": tuple(dinfo["range"]),
+                    "hotspot_center": dinfo["hotspot_center"],
+                    "description": dinfo["description"],
+                }
+                for dname, dinfo in domains.items()
+            ],
+        }
+    return reg
+
+
+DOMAIN_REGISTRY = _build_domain_registry()
 
 DOMAIN_PADDING = 30  # Retain 30aa padding on each side of domain boundary
 
@@ -2222,19 +2126,31 @@ async def binder_design_pipeline(req: BinderDesignPipelineRequest):
 
 # ─── Target Tier Classification ───────────────────────────────────────────────
 
-# Known antibody-antigen complex structures for Tier 1 hotspot extraction
-# IMPORTANT: All chain IDs MUST be verified from actual PDB structure using gemmi.
-# Never guess ligand_chains — always check: gemmi.read_structure(pdb) → list all chains + sizes.
-# Lesson: 1YY9 EGFR had ligand_chains=["B"] (wrong), actual cetuximab is ["C","D"].
-KNOWN_COMPLEXES = {
-    "HER2":  {"pdb": "1N8Z", "receptor_chain": "C", "ligand_chains": ["A", "B"], "source": "trastuzumab"},        # C(581aa) vs A(214)+B(220) Fab
-    "ERBB2": {"pdb": "1N8Z", "receptor_chain": "C", "ligand_chains": ["A", "B"], "source": "trastuzumab"},
-    "PD-L1": {"pdb": "5XXY", "receptor_chain": "A", "ligand_chains": ["H", "L"], "source": "atezolizumab"},       # A(99aa PD-L1) vs H(208)+L(211) Fab
-    "EGFR":  {"pdb": "1YY9", "receptor_chain": "A", "ligand_chains": ["C", "D"], "source": "cetuximab"},          # A(613aa) vs C(211)+D(220) Fab
-    "VEGF":  {"pdb": "1BJ1", "receptor_chain": "V", "ligand_chains": ["H", "L"], "source": "bevacizumab"},        # V(94aa VEGF) vs H(218)+L(213) Fab; W/J/K are symmetry mates
-    "TNF":   {"pdb": "3WD5", "receptor_chain": "A", "ligand_chains": ["H", "L"], "source": "adalimumab"},         # A(152aa TNF) vs H(214)+L(213) Fab
-    # CD20 6Y4J removed — only 1 chain (A, 426aa), no antibody in this structure
-}
+# Known antibody-antigen complex structures for Tier 1 hotspot extraction.
+# Loaded from config/target_registry.json. Only Tier 1 targets (with verified
+# receptor_chain and ligand_chains) are included in KNOWN_COMPLEXES.
+
+def _build_known_complexes() -> dict:
+    """Build KNOWN_COMPLEXES from target_registry.json (Tier 1 entries only)."""
+    result = {}
+    for name, entry in _TARGET_REGISTRY["targets"].items():
+        if entry.get("tier") != 1:
+            continue
+        if not entry.get("receptor_chain") or not entry.get("ligand_chains"):
+            continue
+        rec = {
+            "pdb": entry["pdb"],
+            "receptor_chain": entry["receptor_chain"],
+            "ligand_chains": entry["ligand_chains"],
+            "source": entry.get("source", ""),
+        }
+        result[name] = rec
+        for alias in entry.get("aliases", []):
+            result[alias] = rec
+    return result
+
+
+KNOWN_COMPLEXES = _build_known_complexes()
 
 
 def _classify_target_tier(target_name: str, pdb_id: str, rag_result: dict) -> dict:

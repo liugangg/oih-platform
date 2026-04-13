@@ -15,6 +15,7 @@ import asyncio
 import json
 import re
 import httpx
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -134,14 +135,11 @@ class QwenBioAgent:
         "alphafold", "gromacs", "docking", "md", "adc", "ligand",
     ]
 
-    # ── Known target PDB mapping ──
-    TARGET_PDB = {
-        "her2": "1N8Z", "erbb2": "1N8Z", "pd-l1": "5XXY", "pdl1": "5XXY",
-        "egfr": "1YY9", "vegf": "1BJ1", "tnf": "3WD5", "cd36": "5LGD",
-        "nectin-4": "4GJT", "nectin4": "4GJT", "trop2": "7PEE", "trka": "1HE7",
-        "cox-2": "5XWR", "cox2": "5XWR", "bcl-2": "6O0K", "bcl2": "6O0K",
-        "tp53": "2XWR", "p53": "2XWR",
-    }
+    # ── Known target PDB mapping (loaded from config/target_registry.json) ──
+    _registry_path = Path(__file__).parent / "config" / "target_registry.json"
+    with open(_registry_path) as _f:
+        _registry = json.load(_f)
+    TARGET_PDB = _registry["pdb_aliases"]
 
     @staticmethod
     def is_simple_message(msg: str) -> bool:
