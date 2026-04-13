@@ -2156,9 +2156,8 @@ KNOWN_COMPLEXES = _build_known_complexes()
 def _classify_target_tier(target_name: str, pdb_id: str, rag_result: dict) -> dict:
     """
     Classify target into tiers for hotspot identification strategy.
-    Tier 1: Known complex PDB exists → structural_database path (most reliable)
-    Tier 2: Homologous structure found via RAG → rag_guided path
-    Tier 3: Novel target → computational_prediction path (DiscoTope3 + IEDB + RAG)
+    Tier 1: Known antibody co-crystal exists → extract interface residues directly
+    Tier 2: No co-crystal → PeSTo PPI prediction for de novo hotspot discovery
     """
     if target_name:
         target_upper = target_name.upper().strip()
@@ -2166,12 +2165,7 @@ def _classify_target_tier(target_name: str, pdb_id: str, rag_result: dict) -> di
             if key in target_upper:
                 return {"tier": 1, "method": "structural_database", **val}
 
-    # Check RAG for PDB mentions of antibody complexes
-    rag_pdbs = rag_result.get("pdb_ids", [])
-    if rag_pdbs:
-        return {"tier": 2, "method": "rag_guided", "pdb": rag_pdbs[0]}
-
-    return {"tier": 3, "method": "computational_prediction"}
+    return {"tier": 2, "method": "computational_prediction"}
 
 
 # ─── Pocket-Guided Binder + ADC Pipeline ─────────────────────────────────────

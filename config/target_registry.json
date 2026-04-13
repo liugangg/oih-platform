@@ -22,7 +22,7 @@
           "description": "Trastuzumab epitope, C558-C573"
         }
       },
-      "notes": "Trastuzumab co-crystal, C(581aa) vs A(214)+B(220) Fab"
+      "notes": "Trastuzumab co-crystal, evaluated in paper"
     },
     "EGFR": {
       "aliases": [],
@@ -45,56 +45,14 @@
           "description": "Ligand binding domain III, cetuximab epitope"
         }
       },
-      "notes": "Cetuximab co-crystal, A(613aa) vs C(211)+D(220) Fab"
-    },
-    "PDL1": {
-      "aliases": ["PD-L1"],
-      "pdb": "4ZQK",
-      "tier": 1,
-      "receptor_chain": "A",
-      "ligand_chains": ["H", "L"],
-      "source": "atezolizumab",
-      "uniprot": "Q9NZQ7",
-      "signal_peptide_offset": 18,
-      "domain_registry": {
-        "ig_v_domain": {
-          "range": [19, 127],
-          "hotspot_center": 73,
-          "description": "IgV domain, PD-1 binding interface"
-        }
-      },
-      "notes": "PD-1 co-crystal"
-    },
-    "VEGF": {
-      "aliases": [],
-      "pdb": "1BJ1",
-      "tier": 1,
-      "receptor_chain": "V",
-      "ligand_chains": ["H", "L"],
-      "source": "bevacizumab",
-      "uniprot": null,
-      "signal_peptide_offset": 0,
-      "domain_registry": {},
-      "notes": "Bevacizumab co-crystal, V(94aa) vs H(218)+L(213) Fab"
-    },
-    "TNF": {
-      "aliases": [],
-      "pdb": "3WD5",
-      "tier": 1,
-      "receptor_chain": "A",
-      "ligand_chains": ["H", "L"],
-      "source": "adalimumab",
-      "uniprot": null,
-      "signal_peptide_offset": 0,
-      "domain_registry": {},
-      "notes": "Adalimumab co-crystal, A(152aa) vs H(214)+L(213) Fab"
+      "notes": "Cetuximab co-crystal, evaluated in paper"
     },
     "NECTIN4": {
       "aliases": ["NECTIN-4"],
       "pdb": "4GJT",
       "tier": 2,
       "receptor_chain": null,
-      "ligand_chains": ["B"],
+      "ligand_chains": null,
       "source": null,
       "uniprot": "Q96NY8",
       "signal_peptide_offset": 0,
@@ -105,7 +63,7 @@
           "description": "Ig-like D1+D2 domains, PeSTo L208/R212/Y214 (score 0.95-0.97)"
         }
       },
-      "notes": "MV-H complex, PeSTo PPI"
+      "notes": "PeSTo PPI, evaluated in paper"
     },
     "CD36": {
       "aliases": [],
@@ -133,7 +91,7 @@
           "description": "Full extracellular domain (fallback only)"
         }
       },
-      "notes": "No antibody co-crystal, PeSTo PPI"
+      "notes": "PeSTo PPI + CLESH ablation study, evaluated in paper"
     },
     "TROP2": {
       "aliases": [],
@@ -151,7 +109,25 @@
           "description": "Full ectodomain (PeSTo max=0.42, flat surface)"
         }
       },
-      "notes": "Apo structure, PeSTo PPI"
+      "notes": "PeSTo PPI, negative control, evaluated in paper"
+    },
+    "PDL1": {
+      "aliases": ["PD-L1"],
+      "pdb": "4ZQK",
+      "tier": 1,
+      "receptor_chain": "A",
+      "ligand_chains": ["B"],
+      "source": "pembrolizumab",
+      "uniprot": "Q9NZQ7",
+      "signal_peptide_offset": 18,
+      "domain_registry": {
+        "ig_v_domain": {
+          "range": [19, 127],
+          "hotspot_center": 73,
+          "description": "IgV domain, PD-1 binding interface"
+        }
+      },
+      "notes": "PD-1 co-crystal, not evaluated in current paper"
     },
     "TRKA": {
       "aliases": [],
@@ -174,16 +150,14 @@
           "description": "Full ECD (fallback)"
         }
       },
-      "notes": "NGF complex, PeSTo PPI"
+      "notes": "NGF complex, PeSTo PPI, not evaluated in current paper"
     }
   },
   "pdb_aliases": {
     "_comment": "Quick lookup: target name -> PDB ID, used by agent fast-route detection",
     "her2": "1N8Z", "erbb2": "1N8Z",
-    "pd-l1": "5XXY", "pdl1": "5XXY", "pdl-1": "5XXY",
+    "pd-l1": "4ZQK", "pdl1": "4ZQK",
     "egfr": "1YY9",
-    "vegf": "1BJ1",
-    "tnf": "3WD5",
     "cd36": "5LGD",
     "nectin-4": "4GJT", "nectin4": "4GJT",
     "trop2": "7PEE",
