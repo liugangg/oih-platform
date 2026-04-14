@@ -26,7 +26,7 @@ QWEN_MODEL    = "Qwen3-14B"
 OIH_API_BASE  = f"http://{_server_host}:8080/api/v1"
 
 # ─── LLM Backend (provider-agnostic) ─────────────────────────────────────────
-from core.llm_backend import get_backend as create_backend, LLMBackend
+from core.llm_backend import get_backend as create_backend, LLMBackend, LLMResponse
 from core.config import settings as _cfg
 
 _default_backend = create_backend(
