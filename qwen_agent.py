@@ -1004,18 +1004,23 @@ def _get_or_create_agent(session_id: str, req: AgentChatRequest) -> QwenBioAgent
 
     agent = _sessions[session_id]
 
-    # Switch LLM backend if requested
-    if req.llm_provider and req.llm_provider != agent._llm_backend.provider:
-        backend = create_backend(
-            provider=req.llm_provider,
-            api_key=_cfg.LLM_API_KEY,
-            model=req.llm_model or _cfg.LLM_MODEL,
-            base_url=_cfg.LLM_BASE_URL,
-            vllm_url=_cfg.QWEN_BASE_URL,
-            vllm_model=_cfg.QWEN_MODEL,
-        )
-        agent._llm_backend = backend
-        print(f"[LLM] Session {session_id}: switched to {req.llm_provider} ({getattr(backend, 'model', '')})")
+    # Switch LLM backend per request; revert to default when not specified
+    wanted = req.llm_provider or _default_backend.provider
+    if wanted != agent._llm_backend.provider or (req.llm_model and req.llm_model != getattr(agent._llm_backend, 'model', '')):
+        if wanted == _default_backend.provider and not req.llm_model:
+            agent._llm_backend = _default_backend
+            print(f"[LLM] Session {session_id}: reverted to default ({_default_backend.provider})")
+        else:
+            backend = create_backend(
+                provider=wanted,
+                api_key=_cfg.LLM_API_KEY,
+                model=req.llm_model or _cfg.LLM_MODEL,
+                base_url=_cfg.LLM_BASE_URL,
+                vllm_url=_cfg.QWEN_BASE_URL,
+                vllm_model=_cfg.QWEN_MODEL,
+            )
+            agent._llm_backend = backend
+            print(f"[LLM] Session {session_id}: switched to {wanted} ({getattr(backend, 'model', '')})")
 
     return agent
 
