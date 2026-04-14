@@ -132,7 +132,11 @@ class QwenBioAgent:
     BIO_KEYWORDS = [
         "protein", "pdb", "smiles", "fasta", "drug", "antibody", "design",
         "predict", "analysis", "structure", "docking", "sequence", "target", "molecule", "nanobody",
-        "alphafold", "gromacs", "docking", "md", "adc", "ligand",
+        "alphafold", "af3", "af2", "gromacs", "docking", "md", "adc", "ligand",
+        "binder", "dock", "admet", "chemprop", "esm", "rfdiffusion", "mpnn", "bindcraft",
+        "her2", "egfr", "cd36", "nectin", "trop2", "pdl1", "pd-l1", "trka",
+        "蛋白", "预测", "结构", "对接", "设计", "药物", "抗体", "序列", "靶点", "配体",
+        "纳米抗体", "分子", "模拟", "突变",
     ]
 
     # ── Known target PDB mapping (loaded from config/target_registry.json) ──
@@ -144,10 +148,13 @@ class QwenBioAgent:
     @staticmethod
     def is_simple_message(msg: str) -> bool:
         msg_lower = msg.lower().strip()
-        if len(msg_lower) < 20:
+        # Check bio keywords first — any match means complex task regardless of length
+        if any(k in msg_lower for k in QwenBioAgent.BIO_KEYWORDS):
+            return False
+        if len(msg_lower) < 30:
             if any(p in msg_lower for p in QwenBioAgent.SIMPLE_PATTERNS):
                 return True
-            if not any(k in msg_lower for k in QwenBioAgent.BIO_KEYWORDS):
+            if len(msg_lower) < 10:
                 return True
         return False
 
