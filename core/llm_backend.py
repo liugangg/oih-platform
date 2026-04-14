@@ -292,7 +292,10 @@ class OpenRouterBackend(LLMBackend):
                  site_url: str = "https://oih-platform.com",
                  site_name: str = "OIH Platform",
                  max_session_cost: float = 5.0, **kwargs):
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        if not api_key:
+            from core.config import settings as _s
+            api_key = _s.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY", "")
+        self.api_key = api_key
         self.model = model
         self.site_url = site_url
         self.site_name = site_name
