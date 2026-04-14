@@ -1,11 +1,12 @@
 """
 LLM Backend Abstraction Layer
-Supports local (vLLM) and remote (Anthropic, OpenAI) inference endpoints.
+Supports local (vLLM) and remote (Anthropic, OpenAI, OpenRouter) inference endpoints.
 The orchestration layer (skills, tools, RAG) is LLM-agnostic.
 """
 
 import os
 import json
+import logging
 import httpx
 from typing import Optional, List, Dict, Any
 from abc import ABC, abstractmethod
@@ -175,6 +176,108 @@ class OpenAIBackend(LLMBackend):
         } for tc in tool_calls]
 
 
+class OpenRouterBackend(LLMBackend):
+    """OpenRouter API backend — routes to Claude Opus 4 etc."""
+
+    OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+
+    def __init__(self, api_key: Optional[str] = None,
+                 model: str = "anthropic/claude-opus-4",
+                 site_url: str = "https://oih-platform.com",
+                 site_name: str = "OIH Platform",
+                 max_session_cost: float = 5.0, **kwargs):
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.model = model
+        self.site_url = site_url
+        self.site_name = site_name
+        self.max_session_cost = max_session_cost
+        self._session_cost = 0.0
+        self.client = httpx.AsyncClient(timeout=600)
+
+    def _headers(self) -> Dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": self.site_url,
+            "X-OpenRouter-Title": self.site_name,
+        }
+
+    async def chat(self, messages, tools=None, temperature=0.7, max_tokens=4096):
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            converted = []
+            for t in tools:
+                if t.get("type") == "function":
+                    converted.append(t)
+                else:
+                    converted.append({
+                        "type": "function",
+                        "function": {
+                            "name": t["name"],
+                            "description": t.get("description", ""),
+                            "parameters": t.get("parameters", {"type": "object", "properties": {}}),
+                        }
+                    })
+            payload["tools"] = converted
+            payload["tool_choice"] = "auto"
+
+        resp = await self.client.post(
+            f"{self.OPENROUTER_BASE}/chat/completions",
+            json=payload, headers=self._headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Cost tracking
+        usage = data.get("usage", {})
+        cost = usage.get("cost", 0) or 0
+        logging.getLogger("oih.llm").info(
+            "[OpenRouter] model=%s prompt_tokens=%d completion_tokens=%d "
+            "cost=$%.4f session_total=$%.4f",
+            data.get("model", self.model),
+            usage.get("prompt_tokens", 0),
+            usage.get("completion_tokens", 0),
+            cost, self._session_cost + cost,
+        )
+        self._session_cost += cost
+        if self._session_cost > self.max_session_cost:
+            raise RuntimeError(
+                f"OpenRouter session cost ${self._session_cost:.2f} "
+                f"exceeds limit ${self.max_session_cost:.2f}. "
+                f"Reset backend instance or increase max_session_cost."
+            )
+
+        return data
+
+    def format_tool_calls(self, response):
+        choices = response.get("choices", [])
+        if not choices:
+            return []
+        msg = choices[0].get("message", {})
+        result = []
+        for tc in msg.get("tool_calls", []):
+            args_str = tc["function"]["arguments"]
+            try:
+                args = json.loads(args_str) if isinstance(args_str, str) else args_str
+            except json.JSONDecodeError:
+                args = {"_raw": args_str}
+            result.append({
+                "id": tc.get("id", ""),
+                "name": tc["function"]["name"],
+                "arguments": args,
+            })
+        return result
+
+    def reset_session_cost(self):
+        """Reset cumulative session cost counter."""
+        self._session_cost = 0.0
+
+
 def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
     """Factory function to create LLM backend.
 
@@ -183,7 +286,7 @@ def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
     actual __init__ signature, dropping unknown / None values.
 
     Args:
-        provider: "local" | "anthropic" | "openai"
+        provider: "local" | "anthropic" | "openai" | "openrouter"
         **kwargs: any of api_key, model, base_url, vllm_url, vllm_model
 
     Returns:
@@ -193,6 +296,7 @@ def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
         "local": LocalVLLM,
         "anthropic": AnthropicBackend,
         "openai": OpenAIBackend,
+        "openrouter": OpenRouterBackend,
     }
     if provider not in backends:
         raise ValueError(f"Unknown provider: {provider}. Choose from {list(backends.keys())}")
@@ -213,6 +317,11 @@ def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
             "api_key":  kwargs.get("api_key"),
             "base_url": kwargs.get("base_url"),
             "model":    kwargs.get("model"),
+        }
+    elif provider == "openrouter":
+        instance_kwargs = {
+            "api_key": kwargs.get("api_key"),
+            "model":   kwargs.get("model"),
         }
 
     # Drop None so backend defaults apply
