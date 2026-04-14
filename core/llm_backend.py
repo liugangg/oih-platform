@@ -301,7 +301,8 @@ class OpenRouterBackend(LLMBackend):
         self.site_name = site_name
         self.max_session_cost = max_session_cost
         self._session_cost = 0.0
-        self.client = httpx.AsyncClient(timeout=600)
+        proxy = os.getenv("https_proxy") or os.getenv("HTTPS_PROXY") or "http://127.0.0.1:7890"
+        self.client = httpx.AsyncClient(timeout=600, proxy=proxy)
 
     def _headers(self) -> Dict[str, str]:
         return {
