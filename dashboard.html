@@ -901,6 +901,14 @@ function App(){
   const[activeTab,setActiveTab]=useState('chat');
   const[chat,setChat]=useState([]);
   const[chatInput,setChatInput]=useState('');
+  const[llmSel,setLlmSel]=useState('local');
+  const LLM_OPTIONS=[
+    {value:'local',label:'🏠 Qwen3-14B（本地）'},
+    {value:'openrouter:meta-llama/llama-4-scout',label:'🦙 Llama 4 Scout'},
+    {value:'openrouter:meta-llama/llama-4-maverick',label:'🦙 Llama 4 Maverick'},
+    {value:'openrouter:google/gemini-2.5-pro',label:'🧠 Gemini 2.5 Pro'},
+    {value:'openrouter:openai/gpt-4.1',label:'💬 GPT-4.1'},
+  ];
   const[rd,setRd]=useState({});  // result data
   const chatEndRef=useRef(null);
   const chatInputRef=useRef(null);
@@ -1153,6 +1161,7 @@ function App(){
     setLoading(true);
     // build request body
     const body={message:msg,session_id:sessionId};
+    if(llmSel!=='local'){const pp=llmSel.split(':');body.llm_provider=pp[0];body.llm_model=pp.slice(1).join(':');}
     if(attachPdb){body.pdb_content=attachPdb.content;body.filename=attachPdb.filename}
     if(attachFasta)body.fasta_sequence=attachFasta;
     if(attachSmiles)body.smiles=attachSmiles;
@@ -2201,6 +2210,10 @@ function App(){
                 )}
                 <input ref={pdbInputRef} type="file" accept=".pdb,.cif" className="hidden" onChange={handlePdbFile}/>
               </div>
+              <select value={llmSel} onChange={e=>setLlmSel(e.target.value)}
+                className="px-2 py-1.5 bg-[#1e2433] border border-border rounded-lg text-xs text-[#94a3b8] font-mono focus:outline-none focus:border-cyan/40 cursor-pointer">
+                {LLM_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
               <input ref={chatInputRef} value={chatInput} onChange={e=>setChatInput(e.target.value)}
                 onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}}}
                 placeholder="Describe your task or ask a question..."
