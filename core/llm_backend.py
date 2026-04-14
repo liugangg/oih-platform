@@ -1,6 +1,6 @@
 """
 LLM Backend Abstraction Layer
-Supports local (vLLM) and remote (Anthropic, OpenAI, OpenRouter) inference endpoints.
+Supports local (vLLM) and remote (Anthropic, OpenAI) inference endpoints.
 The orchestration layer (skills, tools, RAG) is LLM-agnostic.
 """
 
@@ -96,7 +96,7 @@ def _prepend_system(messages: List[Dict], system_prompt: Optional[str]) -> List[
 
 
 def _parse_openai_response(data: Dict) -> LLMResponse:
-    """Parse OpenAI-format response (used by vLLM, OpenAI, OpenRouter)."""
+    """Parse OpenAI-format response (used by vLLM and OpenAI)."""
     choices = data.get("choices", [])
     if not choices:
         return LLMResponse(raw=data, usage=data.get("usage", {}))
@@ -282,102 +282,13 @@ class OpenAIBackend(LLMBackend):
         return _parse_openai_response(resp.json())
 
 
-class OpenRouterBackend(LLMBackend):
-    """OpenRouter API backend — routes to various LLM providers."""
-
-    OPENROUTER_BASE = "https://openrouter.ai/api/v1"
-
-    def __init__(self, api_key: Optional[str] = None,
-                 model: str = "anthropic/claude-opus-4",
-                 site_url: str = "https://oih-platform.com",
-                 site_name: str = "OIH Platform",
-                 max_session_cost: float = 5.0, **kwargs):
-        if not api_key:
-            from core.config import settings as _s
-            api_key = _s.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY", "")
-        self.api_key = api_key
-        self.model = model
-        self.site_url = site_url
-        self.site_name = site_name
-        self.max_session_cost = max_session_cost
-        self._session_cost = 0.0
-        proxy = os.getenv("https_proxy") or os.getenv("HTTPS_PROXY") or "http://127.0.0.1:7890"
-        self.client = httpx.AsyncClient(timeout=600, proxy=proxy)
-
-    def _headers(self) -> Dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": self.site_url,
-            "X-OpenRouter-Title": self.site_name,
-        }
-
-    async def chat(self, messages, tools=None, system_prompt=None,
-                   temperature=0.7, max_tokens=4096):
-        messages = _prepend_system(messages, system_prompt)
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        if tools:
-            converted = []
-            for t in tools:
-                if t.get("type") == "function":
-                    converted.append(t)
-                else:
-                    converted.append({
-                        "type": "function",
-                        "function": {
-                            "name": t["name"],
-                            "description": t.get("description", ""),
-                            "parameters": t.get("parameters", {"type": "object", "properties": {}}),
-                        }
-                    })
-            payload["tools"] = converted
-            payload["tool_choice"] = "auto"
-
-        resp = await self.client.post(
-            f"{self.OPENROUTER_BASE}/chat/completions",
-            json=payload, headers=self._headers(),
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        # Cost tracking
-        usage = data.get("usage", {})
-        cost = usage.get("cost", 0) or 0
-        logging.getLogger("oih.llm").info(
-            "[OpenRouter] model=%s prompt_tokens=%d completion_tokens=%d "
-            "cost=$%.4f session_total=$%.4f",
-            data.get("model", self.model),
-            usage.get("prompt_tokens", 0),
-            usage.get("completion_tokens", 0),
-            cost, self._session_cost + cost,
-        )
-        self._session_cost += cost
-        if self._session_cost > self.max_session_cost:
-            raise RuntimeError(
-                f"OpenRouter session cost ${self._session_cost:.2f} "
-                f"exceeds limit ${self.max_session_cost:.2f}. "
-                f"Reset backend instance or increase max_session_cost."
-            )
-
-        return _parse_openai_response(data)
-
-    def reset_session_cost(self):
-        """Reset cumulative session cost counter."""
-        self._session_cost = 0.0
-
-
 # ── Factory ──────────────────────────────────────────────────────────────────
 
 def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
     """Factory function to create LLM backend.
 
     Args:
-        provider: "local" | "anthropic" | "openai" | "openrouter"
+        provider: "local" | "anthropic" | "openai"
         **kwargs: any of api_key, model, base_url, vllm_url, vllm_model
 
     Returns:
@@ -387,7 +298,6 @@ def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
         "local": LocalVLLM,
         "anthropic": AnthropicBackend,
         "openai": OpenAIBackend,
-        "openrouter": OpenRouterBackend,
     }
     if provider not in backends:
         raise ValueError(f"Unknown provider: {provider}. Choose from {list(backends.keys())}")
@@ -409,12 +319,6 @@ def get_backend(provider: str = "local", **kwargs) -> LLMBackend:
             "base_url": kwargs.get("base_url"),
             "model":    kwargs.get("model"),
         }
-    elif provider == "openrouter":
-        instance_kwargs = {
-            "api_key": kwargs.get("api_key"),
-            "model":   kwargs.get("model"),
-        }
-
     # Drop None so backend defaults apply
     instance_kwargs = {k: v for k, v in instance_kwargs.items() if v is not None}
 

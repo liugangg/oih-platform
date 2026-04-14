@@ -777,7 +777,7 @@ class AgentChatRequest(BaseModel):
     fasta_sequence: Optional[str] = None
     smiles: Optional[str] = None
     filename: Optional[str] = None
-    llm_provider: Optional[str] = None   # "local" | "anthropic" | "openai" | "openrouter"
+    llm_provider: Optional[str] = None   # "local" | "anthropic" | "openai"
     llm_model: Optional[str] = None      # override model for this request
 
 # ─── PTM Detection & Tool Input Generation (standalone functions) ────────────

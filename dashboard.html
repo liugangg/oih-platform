@@ -904,10 +904,8 @@ function App(){
   const[llmSel,setLlmSel]=useState('local');
   const LLM_OPTIONS=[
     {value:'local',label:'🏠 Qwen3-14B（本地）'},
-    {value:'openrouter:meta-llama/llama-4-scout',label:'🦙 Llama 4 Scout'},
-    {value:'openrouter:meta-llama/llama-4-maverick',label:'🦙 Llama 4 Maverick'},
-    {value:'openrouter:google/gemini-2.5-pro',label:'🧠 Gemini 2.5 Pro'},
-    {value:'openrouter:openai/gpt-4.1',label:'💬 GPT-4.1'},
+    {value:'anthropic',label:'🧠 Claude'},
+    {value:'openai',label:'💬 GPT-4'},
   ];
   const[rd,setRd]=useState({});  // result data
   const chatEndRef=useRef(null);
@@ -1161,7 +1159,7 @@ function App(){
     setLoading(true);
     // build request body
     const body={message:msg,session_id:sessionId};
-    if(llmSel!=='local'){const pp=llmSel.split(':');body.llm_provider=pp[0];body.llm_model=pp.slice(1).join(':');}
+    if(llmSel!=='local'){body.llm_provider=llmSel;}
     if(attachPdb){body.pdb_content=attachPdb.content;body.filename=attachPdb.filename}
     if(attachFasta)body.fasta_sequence=attachFasta;
     if(attachSmiles)body.smiles=attachSmiles;
